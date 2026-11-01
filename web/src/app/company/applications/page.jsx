@@ -80,7 +80,7 @@ function CompanyApplicationsContent() {
     department: "Engineering",
     track: "Development",
     mode: "remote",
-    location: "Remote",
+    location: "",
     stipend: "₹25,000 / month",
     duration: "3 Months",
     skills: "React, Node.js, TypeScript",
@@ -92,6 +92,12 @@ function CompanyApplicationsContent() {
   const [isCustomTrack, setIsCustomTrack] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [postingLoading, setPostingLoading] = useState(false);
+
+  const handleWorkModalityChange = (e) => {
+    const mode = e.target.value;
+    setPostForm((prev) => ({ ...prev, mode, location: mode === "remote" ? "" : prev.location }));
+    setFormErrors((prev) => ({ ...prev, location: "" }));
+  };
 
   const handleDepartmentChange = (e) => {
     const val = e.target.value;
@@ -212,6 +218,12 @@ function CompanyApplicationsContent() {
     e.preventDefault();
     if (!postForm.role.trim()) return;
 
+    const location = postForm.mode === "remote" ? "" : postForm.location.trim();
+    if (postForm.mode !== "remote" && !location) {
+      setFormErrors((prev) => ({ ...prev, location: "Enter a city, state, or office location for onsite and hybrid roles." }));
+      return;
+    }
+
     // Validate custom Department
     const resolvedDepartment = isCustomDepartment
       ? customDepartment.trim()
@@ -250,7 +262,7 @@ function CompanyApplicationsContent() {
       id: `int-${Date.now()}`,
       role: postForm.role.trim(),
       company: currentUser?.companyProfile?.companyName || currentUser?.name || "Partner Company",
-      location: postForm.location || "Remote",
+      location,
       mode: postForm.mode,
       stipend: postForm.stipend || "Competitive Stipend",
       duration: postForm.duration || "3 Months",
@@ -297,7 +309,7 @@ function CompanyApplicationsContent() {
       department: "Engineering",
       track: "Development",
       mode: "remote",
-      location: "Remote",
+      location: "",
       stipend: "₹25,000 / month",
       duration: "3 Months",
       skills: "React, Node.js, TypeScript",
@@ -885,7 +897,7 @@ function CompanyApplicationsContent() {
                       </label>
                       <select
                         value={postForm.mode}
-                        onChange={(e) => setPostForm({ ...postForm, mode: e.target.value })}
+                        onChange={handleWorkModalityChange}
                         className="w-full h-11 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all cursor-pointer"
                       >
                         <option value="remote">Remote (Anywhere)</option>
@@ -894,18 +906,25 @@ function CompanyApplicationsContent() {
                       </select>
                     </div>
 
-                    <div className="space-y-1.5">
+                    {postForm.mode !== "remote" && <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        Location
+                        Location *
                       </label>
                       <input
                         type="text"
-                        placeholder="e.g. Bengaluru, India or Remote"
+                        required
+                        maxLength={150}
+                        placeholder="e.g. Bengaluru, Karnataka or Head Office"
                         value={postForm.location}
-                        onChange={(e) => setPostForm({ ...postForm, location: e.target.value })}
-                        className="w-full h-11 px-3.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all"
+                        onChange={(e) => {
+                          setPostForm({ ...postForm, location: e.target.value });
+                          if (formErrors.location) setFormErrors((prev) => ({ ...prev, location: "" }));
+                        }}
+                        aria-invalid={Boolean(formErrors.location)}
+                        className={`w-full h-11 px-3.5 rounded-xl border ${formErrors.location ? "border-red-400 bg-red-50/30" : "border-gray-200 bg-gray-50"} text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all`}
                       />
-                    </div>
+                      {formErrors.location && <p className="text-[11px] text-red-500 font-medium">{formErrors.location}</p>}
+                    </div>}
                   </div>
 
                   {/* Grid: Monthly Stipend & Duration */}
