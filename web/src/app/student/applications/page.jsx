@@ -21,24 +21,14 @@ import DashboardHeader from "@/components/DashboardHeader";
 import CompanyLogo from "@/components/CompanyLogo";
 import { applicationService } from "@/services/apiClient";
 
-const normalizeStatus = (status = "applied") => {
-  const normalized = String(status).toLowerCase().replace(/[\s-]+/g, "_");
-  const statusMap = {
-    applied: "Applied",
-    pending: "Applied",
-    reviewing: "Reviewing",
-    under_review: "Reviewing",
-    shortlisted: "Shortlisted",
-    interviewing: "Interviewing",
-    interview_scheduled: "Interviewing",
-    offered: "Offered",
-    offer: "Offered",
-    accepted: "Offered",
-    hired: "Offered",
-    rejected: "Rejected",
-  };
-  return statusMap[normalized] || "Applied";
-};
+import {
+  tabs,
+  dateAppliedOptions,
+  tabSortOptions,
+  normalizeStatus,
+  sortApplications,
+  filterApplications,
+} from "@/lib/applicationFilters";
 
 const statusStyles = {
   Applied: {
@@ -53,7 +43,7 @@ const statusStyles = {
     bg: "bg-indigo-50 text-indigo-700 border-indigo-200",
     icon: CheckCircle2,
   },
-  Interviewing: {
+  Interview: {
     bg: "bg-purple-50 text-purple-700 border-purple-200",
     icon: Calendar,
   },
@@ -73,22 +63,21 @@ const getInternshipId = (internship, fallbackId) => {
   return internship._id || internship.id || fallbackId || "";
 };
 
-const tabs = [
-  "All",
-  "Applied",
-  "Reviewing",
-  "Shortlisted",
-  "Interviewing",
-  "Offered",
-  "Rejected",
-];
-
 export default function StudentApplicationsPage() {
   const [activeTab, setActiveTab] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [dateFilter, setDateFilter] = useState("any");
+  const [sortBy, setSortBy] = useState("recently_applied");
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [sortBy, setSortBy] = useState("newest");
+
+  const handleTabChange = (newTab) => {
+    setActiveTab(newTab);
+    const availableSorts = tabSortOptions[newTab] || tabSortOptions.All;
+    if (!availableSorts.some((opt) => opt.value === sortBy)) {
+      setSortBy(availableSorts[0].value);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -110,6 +99,16 @@ export default function StudentApplicationsPage() {
                 : !isNaN(appliedTimestamp) && appliedTimestamp > 0
                 ? appliedTimestamp
                 : 0;
+
+            const updatedTimestamp = app.updatedAt ? new Date(app.updatedAt).getTime() : 0;
+            const updatedAt =
+              !isNaN(updatedTimestamp) && updatedTimestamp > 0
+                ? updatedTimestamp
+                : appliedAt;
+
+            const rawInterview = app.interviewDate ? new Date(app.interviewDate) : null;
+            const interviewTimestamp =
+              rawInterview && !isNaN(rawInterview.getTime()) ? rawInterview.getTime() : 0;
 
             const dateObj = app.createdAt
               ? new Date(app.createdAt)
@@ -137,6 +136,9 @@ export default function StudentApplicationsPage() {
               status: normalizeStatus(app.status),
               rawStatus: app.status || "applied",
               appliedAt,
+              updatedAt,
+              interviewDate: app.interviewDate || null,
+              interviewTimestamp,
               stageNotes: app.notes || "Application submitted successfully.",
               recruiterName: internObj?.postedBy?.name || "Hiring Team",
               recruiterRole: "Talent Acquisition",
@@ -156,34 +158,14 @@ export default function StudentApplicationsPage() {
     };
   }, []);
 
-  const filteredApplications = applications
-    .filter((app) => {
-      const matchesTab = activeTab === "All" || app.status === activeTab;
-      const query = searchQuery.trim().toLowerCase();
-      if (!query) return matchesTab;
-
-      const matchesSearch =
-        (app.companyName || "").toLowerCase().includes(query) ||
-        (app.role || "").toLowerCase().includes(query) ||
-        (app.skillsMatched || []).some((skill) =>
-          String(skill).toLowerCase().includes(query)
-        );
-
-      return matchesTab && matchesSearch;
-    })
-    .sort((a, b) => {
-      switch (sortBy) {
-        case "oldest":
-          return (a.appliedAt || 0) - (b.appliedAt || 0);
-        case "company_az":
-          return (a.companyName || "").localeCompare(b.companyName || "");
-        case "role_az":
-          return (a.role || "").localeCompare(b.role || "");
-        case "newest":
-        default:
-          return (b.appliedAt || 0) - (a.appliedAt || 0);
-      }
-    });
+  const filteredApplications = sortApplications(
+    filterApplications(applications, {
+      activeTab,
+      searchQuery,
+      dateFilter,
+    }),
+    sortBy
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -231,7 +213,7 @@ export default function StudentApplicationsPage() {
               <p className="text-xl font-extrabold text-blue-600 mt-0.5">
                 {
                   applications.filter((a) =>
-                    ["Reviewing", "Shortlisted", "Interviewing"].includes(a.status)
+                    ["Reviewing", "Shortlisted", "Interview"].includes(a.status)
                   ).length
                 }
               </p>
@@ -256,7 +238,7 @@ export default function StudentApplicationsPage() {
 
           {/* Search, Sort & Tabs Bar */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-4">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -268,42 +250,68 @@ export default function StudentApplicationsPage() {
                 />
               </div>
 
-              <div className="flex items-center gap-2 sm:ml-2">
-                <label
-                  htmlFor="application-sort"
-                  className="text-xs font-semibold text-slate-500 whitespace-nowrap"
-                >
-                  Sort by
-                </label>
-                <select
-                  id="application-sort"
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4B9C93] cursor-pointer"
-                >
-                  <option value="newest">Newest First</option>
-                  <option value="oldest">Oldest First</option>
-                  <option value="company_az">Company Name A–Z</option>
-                  <option value="role_az">Role Name A–Z</option>
-                </select>
-              </div>
-
-              {/* Status Tabs */}
-              <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-                {tabs.map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                      activeTab === tab
-                        ? "bg-[#4B9C93] text-white shadow-2xs"
-                        : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-                    }`}
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Date Applied Filter */}
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor="date-applied-filter"
+                    className="text-xs font-semibold text-slate-500 whitespace-nowrap"
                   >
-                    {tab}
-                  </button>
-                ))}
+                    Date applied
+                  </label>
+                  <select
+                    id="date-applied-filter"
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4B9C93] cursor-pointer"
+                  >
+                    {dateAppliedOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Sort by */}
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor="application-sort"
+                    className="text-xs font-semibold text-slate-500 whitespace-nowrap"
+                  >
+                    Sort by
+                  </label>
+                  <select
+                    id="application-sort"
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4B9C93] cursor-pointer"
+                  >
+                    {(tabSortOptions[activeTab] || tabSortOptions.All).map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+            </div>
+
+            {/* Status Tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none border-t border-slate-100 pt-3">
+              {tabs.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => handleTabChange(tab)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                    activeTab === tab
+                      ? "bg-[#4B9C93] text-white shadow-2xs"
+                      : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -373,6 +381,20 @@ export default function StudentApplicationsPage() {
                             </span>
                             <span>•</span>
                             <span>Applied on {app.appliedDate}</span>
+                            {app.interviewDate && (
+                              <>
+                                <span>•</span>
+                                <span className="flex items-center gap-1 font-semibold text-purple-700">
+                                  <Calendar className="w-3.5 h-3.5" />
+                                  Interview:{" "}
+                                  {new Date(app.interviewDate).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })}
+                                </span>
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
