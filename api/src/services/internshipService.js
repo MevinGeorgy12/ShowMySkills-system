@@ -33,6 +33,20 @@ export const getInternships = async (query) => {
     };
   }
 
+  if (query.department) {
+    filter.department = {
+      $regex: String(query.department).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      $options: 'i',
+    };
+  }
+
+  if (query.track) {
+    filter.track = {
+      $regex: String(query.track).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+      $options: 'i',
+    };
+  }
+
   if (query.verified === 'true') {
     filter.isVerified = true;
   }
@@ -56,6 +70,8 @@ export const getInternships = async (query) => {
         { company: { $regex: escaped, $options: 'i' } },
         { skills: { $regex: escaped, $options: 'i' } },
         { description: { $regex: escaped, $options: 'i' } },
+        { department: { $regex: escaped, $options: 'i' } },
+        { track: { $regex: escaped, $options: 'i' } },
       ];
     }
   }
@@ -98,16 +114,32 @@ export const getInternshipById = async (id) => {
 };
 
 export const createInternship = async (data, userId = null) => {
+  const payload = { ...data };
+  if (typeof payload.department === 'string') {
+    payload.department = payload.department.trim();
+  }
+  if (typeof payload.track === 'string') {
+    payload.track = payload.track.trim();
+  }
+
   const newInternship = await Internship.create({
-    ...data,
+    ...payload,
     postedBy: userId,
-    status: data.status || 'active',
+    status: payload.status || 'active',
   });
   return newInternship;
 };
 
 export const updateInternship = async (id, data) => {
-  const updated = await Internship.findByIdAndUpdate(id, { $set: data }, { new: true });
+  const updatePayload = { ...data };
+  if (typeof updatePayload.department === 'string') {
+    updatePayload.department = updatePayload.department.trim();
+  }
+  if (typeof updatePayload.track === 'string') {
+    updatePayload.track = updatePayload.track.trim();
+  }
+
+  const updated = await Internship.findByIdAndUpdate(id, { $set: updatePayload }, { new: true });
   if (!updated) {
     const error = new Error('Internship not found');
     error.statusCode = 404;

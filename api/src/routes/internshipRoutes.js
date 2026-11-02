@@ -7,6 +7,7 @@ import {
   removeInternship,
 } from '../controllers/internshipController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
+import { validateInternshipPayload } from '../validators/internshipValidator.js';
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ const router = express.Router();
  * /api/internships:
  *   get:
  *     summary: Discover and filter active internship openings
- *     description: Retrieve a paginated list of internships with search keyword, location, mode (remote/onsite/hybrid), required skill, and verified badges.
+ *     description: Retrieve a paginated list of internships with search keyword, location, mode (remote/onsite/hybrid), department, track, required skill, and verified badges.
  *     tags:
  *       - Internships
  *     parameters:
@@ -23,7 +24,7 @@ const router = express.Router();
  *         name: search
  *         schema:
  *           type: string
- *         description: Search by role title, company name, or description
+ *         description: Search by role title, company name, department, track, or description
  *       - in: query
  *         name: location
  *         schema:
@@ -35,6 +36,16 @@ const router = express.Router();
  *           type: string
  *           enum: [remote, onsite, hybrid]
  *         description: Work modality filter
+ *       - in: query
+ *         name: department
+ *         schema:
+ *           type: string
+ *         description: Filter by department (predefined or custom)
+ *       - in: query
+ *         name: track
+ *         schema:
+ *           type: string
+ *         description: Filter by track (predefined or custom)
  *       - in: query
  *         name: skill
  *         schema:
@@ -77,7 +88,7 @@ const router = express.Router();
  *                   $ref: '#/components/schemas/Pagination'
  *   post:
  *     summary: Create a new internship posting (Recruiters & Companies)
- *     description: Publish a new internship opportunity to the candidate discovery feed.
+ *     description: Publish a new internship opportunity to the candidate discovery feed with support for predefined and custom Department and Track.
  *     security:
  *       - bearerAuth: []
  *     tags:
@@ -107,6 +118,12 @@ const router = express.Router();
  *                 enum: [remote, onsite, hybrid]
  *                 default: 'remote'
  *                 example: 'remote'
+ *               department:
+ *                 type: string
+ *                 example: 'Engineering'
+ *               track:
+ *                 type: string
+ *                 example: 'Development'
  *               stipend:
  *                 type: string
  *                 example: '₹20,000 / month'
@@ -147,7 +164,7 @@ const router = express.Router();
  *         description: Unauthorized - Valid JWT Bearer token required
  */
 router.get('/', listInternships);
-router.post('/', authMiddleware, createNewInternship);
+router.post('/', authMiddleware, validateInternshipPayload, createNewInternship);
 
 /**
  * @openapi
@@ -186,7 +203,7 @@ router.post('/', authMiddleware, createNewInternship);
  *               $ref: '#/components/schemas/ErrorResponse'
  *   put:
  *     summary: Update an existing internship posting
- *     description: Update details, skills, status, or stipend for an existing internship posting.
+ *     description: Update details, skills, department, track, status, or stipend for an existing internship posting.
  *     security:
  *       - bearerAuth: []
  *     tags:
@@ -215,6 +232,10 @@ router.post('/', authMiddleware, createNewInternship);
  *               mode:
  *                 type: string
  *                 enum: [remote, onsite, hybrid]
+ *               department:
+ *                 type: string
+ *               track:
+ *                 type: string
  *               stipend:
  *                 type: string
  *               duration:
@@ -244,6 +265,12 @@ router.post('/', authMiddleware, createNewInternship);
  *                   example: 'Internship posting updated successfully'
  *                 data:
  *                   $ref: '#/components/schemas/Internship'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: Internship not found
  *         content:
@@ -287,7 +314,7 @@ router.post('/', authMiddleware, createNewInternship);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/:id', internshipDetails);
-router.put('/:id', authMiddleware, updateExistingInternship);
+router.put('/:id', authMiddleware, validateInternshipPayload, updateExistingInternship);
 router.delete('/:id', authMiddleware, removeInternship);
 
 export default router;

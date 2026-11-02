@@ -217,6 +217,8 @@ Features role-based access control (Student, Company, College, Admin), ATS job a
             company: { type: 'string', example: 'Acme Technologies' },
             location: { type: 'string', example: 'Bengaluru, India' },
             mode: { type: 'string', enum: ['remote', 'onsite', 'hybrid'], example: 'remote' },
+            department: { type: 'string', example: 'Engineering' },
+            track: { type: 'string', example: 'Development' },
             stipend: { type: 'string', example: '₹25,000 / month' },
             duration: { type: 'string', example: '6 Months' },
             description: { type: 'string', example: 'Work directly on high-scale microservices and responsive dashboards.' },

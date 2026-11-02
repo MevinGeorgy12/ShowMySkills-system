@@ -469,6 +469,10 @@ export const internshipService = {
     return apiRequest("/internships", "POST", internshipData);
   },
 
+  update: async (id, internshipData) => {
+    return apiRequest(`/internships/${id}`, "PUT", internshipData);
+  },
+
   apply: async (internshipId, notes = "") => {
     return apiRequest("/applications/apply", "POST", { internshipId, notes });
   },

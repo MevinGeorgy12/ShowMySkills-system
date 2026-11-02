@@ -35,6 +35,30 @@ import { apiRequest, applicationService, internshipService, authService } from "
 
 const statusTabs = ["All", "Applied", "Reviewing", "Shortlisted", "Interviewing", "Hired", "Rejected"];
 
+const PREDEFINED_DEPARTMENTS = [
+  "Engineering",
+  "Design",
+  "AI & Data",
+  "Product",
+  "Marketing",
+];
+
+const PREDEFINED_TRACKS = [
+  "Development",
+  "UI/UX & Product Design",
+  "AI, Machine Learning & Data",
+  "Product Management",
+  "Growth & Technical Marketing",
+];
+
+const DEPARTMENT_TRACK_MAP = {
+  Engineering: "Development",
+  Design: "UI/UX & Product Design",
+  "AI & Data": "AI, Machine Learning & Data",
+  Product: "Product Management",
+  Marketing: "Growth & Technical Marketing",
+};
+
 function CompanyApplicationsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -54,14 +78,52 @@ function CompanyApplicationsContent() {
   const [postForm, setPostForm] = useState({
     role: "",
     department: "Engineering",
+    track: "Development",
     mode: "remote",
     location: "Remote",
-    stipend: "",
+    stipend: "₹25,000 / month",
     duration: "3 Months",
-    skills: "",
+    skills: "React, Node.js, TypeScript",
     description: "",
   });
+  const [customDepartment, setCustomDepartment] = useState("");
+  const [customTrack, setCustomTrack] = useState("");
+  const [isCustomDepartment, setIsCustomDepartment] = useState(false);
+  const [isCustomTrack, setIsCustomTrack] = useState(false);
+  const [formErrors, setFormErrors] = useState({});
   const [postingLoading, setPostingLoading] = useState(false);
+
+  const handleDepartmentChange = (e) => {
+    const val = e.target.value;
+    if (val === "custom") {
+      setIsCustomDepartment(true);
+      setPostForm((prev) => ({ ...prev, department: "custom" }));
+    } else {
+      setIsCustomDepartment(false);
+      setCustomDepartment("");
+      setFormErrors((prev) => ({ ...prev, department: "" }));
+      setPostForm((prev) => {
+        const updated = { ...prev, department: val };
+        if (!isCustomTrack && DEPARTMENT_TRACK_MAP[val]) {
+          updated.track = DEPARTMENT_TRACK_MAP[val];
+        }
+        return updated;
+      });
+    }
+  };
+
+  const handleTrackChange = (e) => {
+    const val = e.target.value;
+    if (val === "custom") {
+      setIsCustomTrack(true);
+      setPostForm((prev) => ({ ...prev, track: "custom" }));
+    } else {
+      setIsCustomTrack(false);
+      setCustomTrack("");
+      setFormErrors((prev) => ({ ...prev, track: "" }));
+      setPostForm((prev) => ({ ...prev, track: val }));
+    }
+  };
 
   // Fetch applications and posted internships directly from API
   useEffect(() => {
@@ -104,6 +166,7 @@ function CompanyApplicationsContent() {
   // Handle closing modal and removing ?new=true from URL
   const handleClosePostModal = () => {
     setShowPostModal(false);
+    setFormErrors({});
     if (searchParams.get("new") === "true") {
       router.replace("/company/applications");
     }
@@ -149,6 +212,33 @@ function CompanyApplicationsContent() {
     e.preventDefault();
     if (!postForm.role.trim()) return;
 
+    // Validate custom Department
+    const resolvedDepartment = isCustomDepartment
+      ? customDepartment.trim()
+      : postForm.department.trim();
+
+    if (!resolvedDepartment) {
+      setFormErrors((prev) => ({
+        ...prev,
+        department: "Please enter a custom department name.",
+      }));
+      return;
+    }
+
+    // Validate custom Track
+    const resolvedTrack = isCustomTrack
+      ? customTrack.trim()
+      : postForm.track.trim();
+
+    if (!resolvedTrack) {
+      setFormErrors((prev) => ({
+        ...prev,
+        track: "Please enter a custom track name.",
+      }));
+      return;
+    }
+
+    setFormErrors({});
     setPostingLoading(true);
 
     const skillsArray = postForm.skills
@@ -164,7 +254,8 @@ function CompanyApplicationsContent() {
       mode: postForm.mode,
       stipend: postForm.stipend || "Competitive Stipend",
       duration: postForm.duration || "3 Months",
-      department: postForm.department,
+      department: resolvedDepartment,
+      track: resolvedTrack,
       skills: skillsArray,
       status: "active",
       postedDate: "Just now",
@@ -181,6 +272,8 @@ function CompanyApplicationsContent() {
         duration: newInternshipObj.duration,
         description: newInternshipObj.description,
         skills: skillsArray,
+        department: resolvedDepartment,
+        track: resolvedTrack,
       });
 
       const savedInternship = created?.data?.internship || created?.data || newInternshipObj;
@@ -198,17 +291,23 @@ function CompanyApplicationsContent() {
       setPostingLoading(false);
     }
 
-      // Reset form
-      setPostForm({
-        role: "",
-        department: "Engineering",
-        mode: "remote",
-        location: "Remote",
-        stipend: "₹25,000 / month",
-        duration: "3 Months",
-        skills: "React, Node.js, TypeScript",
-        description: "",
-      });
+    // Reset form
+    setPostForm({
+      role: "",
+      department: "Engineering",
+      track: "Development",
+      mode: "remote",
+      location: "Remote",
+      stipend: "₹25,000 / month",
+      duration: "3 Months",
+      skills: "React, Node.js, TypeScript",
+      description: "",
+    });
+    setCustomDepartment("");
+    setCustomTrack("");
+    setIsCustomDepartment(false);
+    setIsCustomTrack(false);
+    setFormErrors({});
   };
 
   return (
@@ -376,6 +475,13 @@ function CompanyApplicationsContent() {
                     <Calendar className="w-3.5 h-3.5 text-gray-400" />
                     {activeInternship.duration}
                   </span>
+                  {(activeInternship.department || activeInternship.track) && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#4B9C93]/10 text-[#2c6e66]">
+                      {activeInternship.department}
+                      {activeInternship.department && activeInternship.track ? " • " : ""}
+                      {activeInternship.track}
+                    </span>
+                  )}
                 </div>
 
                 <div className="text-[11px] font-semibold text-[#4B9C93] shrink-0">
@@ -678,25 +784,101 @@ function CompanyApplicationsContent() {
                     />
                   </div>
 
-                  {/* Grid: Department & Mode */}
+                  {/* Grid: Department & Track */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        Department / Track
+                      <label htmlFor="post-department-select" className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        Department *
                       </label>
                       <select
+                        id="post-department-select"
                         value={postForm.department}
-                        onChange={(e) => setPostForm({ ...postForm, department: e.target.value })}
+                        onChange={handleDepartmentChange}
                         className="w-full h-11 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all cursor-pointer"
                       >
-                        <option value="Engineering">Engineering / Development</option>
-                        <option value="Design">UI/UX & Product Design</option>
-                        <option value="AI & Data">AI, Machine Learning & Data</option>
-                        <option value="Product">Product Management</option>
-                        <option value="Marketing">Growth & Technical Marketing</option>
+                        {PREDEFINED_DEPARTMENTS.map((dept) => (
+                          <option key={dept} value={dept}>
+                            {dept}
+                          </option>
+                        ))}
+                        <option value="custom">+ Custom Department...</option>
                       </select>
+                      {isCustomDepartment && (
+                        <div className="mt-2 space-y-1">
+                          <input
+                            type="text"
+                            id="custom-department-input"
+                            placeholder="Enter custom department (e.g. Operations, Legal, Finance)"
+                            value={customDepartment}
+                            onChange={(e) => {
+                              setCustomDepartment(e.target.value);
+                              if (formErrors.department) {
+                                setFormErrors((prev) => ({ ...prev, department: "" }));
+                              }
+                            }}
+                            className={`w-full h-11 px-3.5 rounded-xl border ${
+                              formErrors.department
+                                ? "border-red-400 bg-red-50/30"
+                                : "border-gray-200 bg-white"
+                            } text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] transition-all`}
+                          />
+                          {formErrors.department && (
+                            <p className="text-[11px] text-red-500 font-medium">
+                              {formErrors.department}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
 
+                    <div className="space-y-1.5">
+                      <label htmlFor="post-track-select" className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        Track *
+                      </label>
+                      <select
+                        id="post-track-select"
+                        value={postForm.track}
+                        onChange={handleTrackChange}
+                        className="w-full h-11 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all cursor-pointer"
+                      >
+                        {PREDEFINED_TRACKS.map((trk) => (
+                          <option key={trk} value={trk}>
+                            {trk}
+                          </option>
+                        ))}
+                        <option value="custom">+ Custom Track...</option>
+                      </select>
+                      {isCustomTrack && (
+                        <div className="mt-2 space-y-1">
+                          <input
+                            type="text"
+                            id="custom-track-input"
+                            placeholder="Enter custom track (e.g. Cloud & DevOps, Quant Trading)"
+                            value={customTrack}
+                            onChange={(e) => {
+                              setCustomTrack(e.target.value);
+                              if (formErrors.track) {
+                                setFormErrors((prev) => ({ ...prev, track: "" }));
+                              }
+                            }}
+                            className={`w-full h-11 px-3.5 rounded-xl border ${
+                              formErrors.track
+                                ? "border-red-400 bg-red-50/30"
+                                : "border-gray-200 bg-white"
+                            } text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] transition-all`}
+                          />
+                          {formErrors.track && (
+                            <p className="text-[11px] text-red-500 font-medium">
+                              {formErrors.track}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Grid: Work Modality & Location */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
                         Work Modality
@@ -711,10 +893,7 @@ function CompanyApplicationsContent() {
                         <option value="onsite">Onsite (Full Office)</option>
                       </select>
                     </div>
-                  </div>
 
-                  {/* Grid: Location & Stipend */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
                         Location
@@ -727,7 +906,10 @@ function CompanyApplicationsContent() {
                         className="w-full h-11 px-3.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all"
                       />
                     </div>
+                  </div>
 
+                  {/* Grid: Monthly Stipend & Duration */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
                         Monthly Stipend
@@ -740,10 +922,7 @@ function CompanyApplicationsContent() {
                         className="w-full h-11 px-3.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all"
                       />
                     </div>
-                  </div>
 
-                  {/* Grid: Duration & Key Skills */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
                         Internship Duration
@@ -759,19 +938,20 @@ function CompanyApplicationsContent() {
                         <option value="6 Months">6 Months</option>
                       </select>
                     </div>
+                  </div>
 
-                    <div className="space-y-1.5">
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        Required Skills (comma separated)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="e.g. React, Docker, Python"
-                        value={postForm.skills}
-                        onChange={(e) => setPostForm({ ...postForm, skills: e.target.value })}
-                        className="w-full h-11 px-3.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all"
-                      />
-                    </div>
+                  {/* Required Skills */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      Required Skills (comma separated)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. React, Docker, Python"
+                      value={postForm.skills}
+                      onChange={(e) => setPostForm({ ...postForm, skills: e.target.value })}
+                      className="w-full h-11 px-3.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all"
+                    />
                   </div>
 
                   {/* Description */}

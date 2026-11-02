@@ -82,6 +82,8 @@ function mapInternship(item) {
     description:
       item.responsibilities || "No description available.",
     applicationUrl: item.applicationUrl || "",
+    department: item.department || "",
+    track: item.track || "",
   };
 }
 

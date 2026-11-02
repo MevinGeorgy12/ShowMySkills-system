@@ -34,6 +34,16 @@ const internshipSchema = new mongoose.Schema(
       enum: ['remote', 'onsite', 'hybrid'],
       default: 'remote',
     },
+    department: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    track: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     stipendMin: {
       type: Number,
       default: 0,
@@ -118,6 +128,9 @@ internshipSchema.index({
   skills: 'text',
   description: 'text',
 });
+
+internshipSchema.index({ department: 1 });
+internshipSchema.index({ track: 1 });
 
 export const Internship = mongoose.models.Internship || mongoose.model('Internship', internshipSchema);
 export default Internship;
