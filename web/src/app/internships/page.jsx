@@ -492,9 +492,9 @@ export default function InternshipsPage() {
           )}
         </AnimatePresence>
 
-        <main className="flex-1 flex flex-col items-center px-4 sm:px-6 py-2 sm:py-3 overflow-y-auto min-h-0">
+        <main className="flex-1 flex flex-col items-center px-4 sm:px-6 py-3 sm:py-4 overflow-y-auto min-h-0">
           {/* ──── Search Bar & Filter Button ──── */}
-          <div className="flex items-center gap-2.5 sm:gap-3 mb-2 sm:mb-2.5 w-full max-w-3xl mx-auto shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 mb-4 sm:mb-5 w-full max-w-3xl mx-auto shrink-0 z-10">
             {/* Search Input Container */}
             <div className="flex-1 relative flex items-center bg-white border-2 border-[#E5E6E5] rounded-full h-11 sm:h-12 px-4 sm:px-5 shadow-xs focus-within:border-[#4B9C93] focus-within:ring-2 focus-within:ring-[#4B9C93]/15 transition-all">
               <Search className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[#292D32] shrink-0" strokeWidth={2} />
@@ -695,9 +695,9 @@ export default function InternshipsPage() {
 
           {/* ──────────────── TAB CONTENT ──────────────── */}
           {activeTab === "Internships" ? (
-            <div className="flex-1 flex flex-col items-center justify-center w-full min-h-0">
+            <div className="w-full flex flex-col items-center justify-start sm:justify-center my-auto py-2 shrink-0 min-h-0">
               {/* Internship Swipe Deck */}
-              <div className="relative w-[400px] sm:w-[430px] md:w-[450px] lg:w-[460px] h-[400px] sm:h-[430px] md:h-[450px] lg:h-[460px] max-w-[92vw] aspect-square mb-2 sm:mb-2.5 flex items-center justify-center shrink-0">
+              <div className="relative w-[360px] sm:w-[400px] md:w-[430px] lg:w-[450px] max-w-[92vw] h-[380px] sm:h-[410px] md:h-[430px] lg:h-[440px] max-h-[calc(100vh-270px)] mb-4 sm:mb-5 flex items-center justify-center shrink-0">
                 {loading ? (
                   <div className="flex flex-col items-center gap-3 text-sm text-gray-500">
                     <div className="w-8 h-8 border-4 border-[#4B9C93]/20 border-t-[#4B9C93] rounded-full animate-spin" />
@@ -764,7 +764,7 @@ export default function InternshipsPage() {
               </div>
 
               {/* Action buttons */}
-              <div className="flex items-center gap-6 sm:gap-8 mb-2 sm:mb-2.5 shrink-0">
+              <div className="flex items-center gap-6 sm:gap-8 shrink-0 z-10 pt-1 pb-2">
                 {/* Skip */}
                 <div className="flex flex-col items-center gap-1">
                   <button
