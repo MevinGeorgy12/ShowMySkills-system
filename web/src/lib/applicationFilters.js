@@ -34,9 +34,9 @@ export const tabs = [
 
 export const dateAppliedOptions = [
   { value: "any", label: "Any time" },
-  { value: "past_month", label: "Past month" },
-  { value: "past_3_months", label: "Past 3 months" },
-  { value: "past_year", label: "Past year" },
+  { value: "last_30_days", label: "Last 30 days" },
+  { value: "last_90_days", label: "Last 90 days" },
+  { value: "last_12_months", label: "Last 12 months" },
 ];
 
 export const tabSortOptions = {
@@ -71,29 +71,48 @@ export const tabSortOptions = {
   ],
 };
 
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
 export const isWithinDateAppliedRange = (
   appliedAt,
   range,
   referenceDate = new Date()
 ) => {
   if (!range || range === "any" || range === "all") return true;
-  if (!appliedAt || appliedAt <= 0) return false;
+  if (typeof appliedAt !== "number" || isNaN(appliedAt) || appliedAt <= 0) return false;
 
-  const now =
-    referenceDate instanceof Date ? referenceDate : new Date(referenceDate);
-  const cutoff = new Date(now.getTime());
+  const nowMs =
+    referenceDate instanceof Date
+      ? referenceDate.getTime()
+      : typeof referenceDate === "number"
+      ? referenceDate
+      : new Date(referenceDate).getTime();
 
-  if (range === "past_month") {
-    cutoff.setMonth(cutoff.getMonth() - 1);
-    return appliedAt >= cutoff.getTime();
+  if (isNaN(nowMs)) return true;
+
+  if (
+    range === "last_30_days" ||
+    range === "past_month" ||
+    range === "30_days"
+  ) {
+    const cutoff = nowMs - 30 * DAY_IN_MS;
+    return appliedAt >= cutoff;
   }
-  if (range === "past_3_months") {
-    cutoff.setMonth(cutoff.getMonth() - 3);
-    return appliedAt >= cutoff.getTime();
+  if (
+    range === "last_90_days" ||
+    range === "past_3_months" ||
+    range === "90_days"
+  ) {
+    const cutoff = nowMs - 90 * DAY_IN_MS;
+    return appliedAt >= cutoff;
   }
-  if (range === "past_year") {
-    cutoff.setFullYear(cutoff.getFullYear() - 1);
-    return appliedAt >= cutoff.getTime();
+  if (
+    range === "last_12_months" ||
+    range === "past_year" ||
+    range === "12_months"
+  ) {
+    const cutoff = nowMs - 365 * DAY_IN_MS;
+    return appliedAt >= cutoff;
   }
 
   return true;

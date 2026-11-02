@@ -87,84 +87,261 @@ test('STU-021: Filter applications by status tab and search combined', () => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// STU-022: Date Applied Filter Logic
+// STU-022: Date Applied Filter Logic (Rolling Periods)
 // ─────────────────────────────────────────────────────────────
 
-test('STU-022: Date applied filter (Any time, Past month, Past 3 months, Past year)', () => {
+test('STU-022: Date applied filter options and rolling duration calculations', () => {
   const refDate = new Date('2026-11-01T12:00:00Z');
+  const DAY_MS = 24 * 60 * 60 * 1000;
 
-  // 10 days ago (within past month, 3 months, year)
-  const app10Days = new Date('2026-10-22T12:00:00Z').getTime();
-  // 50 days ago (outside past month, within 3 months, year)
-  const app50Days = new Date('2026-09-12T12:00:00Z').getTime();
-  // 150 days ago (outside past 3 months, within year)
-  const app150Days = new Date('2026-06-04T12:00:00Z').getTime();
-  // 400 days ago (outside past year)
-  const app400Days = new Date('2025-09-27T12:00:00Z').getTime();
+  // 10 days ago (within 30 days, 90 days, 12 months)
+  const app10Days = refDate.getTime() - 10 * DAY_MS;
+  // 50 days ago (outside 30 days, within 90 days, 12 months)
+  const app50Days = refDate.getTime() - 50 * DAY_MS;
+  // 150 days ago (outside 90 days, within 12 months)
+  const app150Days = refDate.getTime() - 150 * DAY_MS;
+  // 400 days ago (outside 12 months)
+  const app400Days = refDate.getTime() - 400 * DAY_MS;
 
   assert.strictEqual(isWithinDateAppliedRange(app10Days, 'any', refDate), true);
-  assert.strictEqual(isWithinDateAppliedRange(app10Days, 'past_month', refDate), true);
-  assert.strictEqual(isWithinDateAppliedRange(app10Days, 'past_3_months', refDate), true);
-  assert.strictEqual(isWithinDateAppliedRange(app10Days, 'past_year', refDate), true);
+  assert.strictEqual(isWithinDateAppliedRange(app10Days, 'last_30_days', refDate), true);
+  assert.strictEqual(isWithinDateAppliedRange(app10Days, 'last_90_days', refDate), true);
+  assert.strictEqual(isWithinDateAppliedRange(app10Days, 'last_12_months', refDate), true);
 
-  assert.strictEqual(isWithinDateAppliedRange(app50Days, 'past_month', refDate), false);
-  assert.strictEqual(isWithinDateAppliedRange(app50Days, 'past_3_months', refDate), true);
-  assert.strictEqual(isWithinDateAppliedRange(app50Days, 'past_year', refDate), true);
+  assert.strictEqual(isWithinDateAppliedRange(app50Days, 'last_30_days', refDate), false);
+  assert.strictEqual(isWithinDateAppliedRange(app50Days, 'last_90_days', refDate), true);
+  assert.strictEqual(isWithinDateAppliedRange(app50Days, 'last_12_months', refDate), true);
 
-  assert.strictEqual(isWithinDateAppliedRange(app150Days, 'past_month', refDate), false);
-  assert.strictEqual(isWithinDateAppliedRange(app150Days, 'past_3_months', refDate), false);
-  assert.strictEqual(isWithinDateAppliedRange(app150Days, 'past_year', refDate), true);
+  assert.strictEqual(isWithinDateAppliedRange(app150Days, 'last_30_days', refDate), false);
+  assert.strictEqual(isWithinDateAppliedRange(app150Days, 'last_90_days', refDate), false);
+  assert.strictEqual(isWithinDateAppliedRange(app150Days, 'last_12_months', refDate), true);
 
-  assert.strictEqual(isWithinDateAppliedRange(app400Days, 'past_year', refDate), false);
+  assert.strictEqual(isWithinDateAppliedRange(app400Days, 'last_12_months', refDate), false);
   assert.strictEqual(isWithinDateAppliedRange(app400Days, 'any', refDate), true);
 
-  // Missing or 0 appliedAt
-  assert.strictEqual(isWithinDateAppliedRange(0, 'past_month', refDate), false);
-  assert.strictEqual(isWithinDateAppliedRange(null, 'past_month', refDate), false);
+  // Missing or invalid appliedAt
+  assert.strictEqual(isWithinDateAppliedRange(0, 'last_30_days', refDate), false);
+  assert.strictEqual(isWithinDateAppliedRange(null, 'last_30_days', refDate), false);
+  assert.strictEqual(isWithinDateAppliedRange(undefined, 'last_30_days', refDate), false);
+  assert.strictEqual(isWithinDateAppliedRange('not-a-date', 'last_30_days', refDate), false);
   assert.strictEqual(isWithinDateAppliedRange(0, 'any', refDate), true);
 
-  // Verify dropdown options
-  const optionValues = dateAppliedOptions.map((o) => o.value);
-  assert.deepStrictEqual(optionValues, ['any', 'past_month', 'past_3_months', 'past_year']);
+  // Verify dropdown options have exact required labels and values
+  assert.deepStrictEqual(dateAppliedOptions, [
+    { value: 'any', label: 'Any time' },
+    { value: 'last_30_days', label: 'Last 30 days' },
+    { value: 'last_90_days', label: 'Last 90 days' },
+    { value: 'last_12_months', label: 'Last 12 months' },
+  ]);
 });
 
-test('STU-022: Date applied filter combined with status tabs and text search', () => {
-  const refDate = new Date('2026-11-01T12:00:00Z');
+test('STU-022: Date ranges strictly filter by student appliedAt (not updatedAt, interviewDate, or postingDate)', () => {
+  const refDate = new Date('2026-04-15T12:00:00Z');
+  const DAY_MS = 24 * 60 * 60 * 1000;
 
-  const sampleApps = [
-    { id: '1', role: 'Frontend Engineer', companyName: 'Acme Corp', status: 'Interview', skillsMatched: ['React'], appliedAt: new Date('2026-10-25T12:00:00Z').getTime() },
-    { id: '2', role: 'Backend Engineer', companyName: 'Beta Labs', status: 'Interview', skillsMatched: ['Node.js'], appliedAt: new Date('2026-09-15T12:00:00Z').getTime() },
-    { id: '3', role: 'Fullstack Dev', companyName: 'Gamma Systems', status: 'Interview', skillsMatched: ['React'], appliedAt: new Date('2026-06-01T12:00:00Z').getTime() },
-    { id: '4', role: 'React Intern', companyName: 'Delta Labs', status: 'Applied', skillsMatched: ['React'], appliedAt: new Date('2026-10-28T12:00:00Z').getTime() },
+  // Application submitted in February (60 days ago), but updated yesterday and has interview tomorrow
+  const appSubmittedInFeb = {
+    id: 'app-feb',
+    role: 'Fullstack Intern',
+    companyName: 'Acme Corp',
+    status: 'Interview',
+    appliedAt: refDate.getTime() - 60 * DAY_MS, // ~Feb 14
+    updatedAt: refDate.getTime() - 1 * DAY_MS,  // ~Apr 14 (yesterday)
+    interviewDate: new Date(refDate.getTime() + 2 * DAY_MS).toISOString(),
+    interviewTimestamp: refDate.getTime() + 2 * DAY_MS,
+  };
+
+  // Application submitted in April (5 days ago)
+  const appSubmittedInApr = {
+    id: 'app-apr',
+    role: 'Frontend Intern',
+    companyName: 'Beta Labs',
+    status: 'Shortlisted',
+    appliedAt: refDate.getTime() - 5 * DAY_MS,
+    updatedAt: refDate.getTime() - 5 * DAY_MS,
+  };
+
+  const apps = [appSubmittedInFeb, appSubmittedInApr];
+
+  // Under "Last 30 days", the Feb application MUST be excluded even though it has recent status update & interview date
+  const last30 = filterApplications(apps, {
+    activeTab: 'All',
+    dateFilter: 'last_30_days',
+    referenceDate: refDate,
+  });
+  assert.strictEqual(last30.length, 1);
+  assert.strictEqual(last30[0].id, 'app-apr');
+
+  // Under "Last 90 days", both are included
+  const last90 = filterApplications(apps, {
+    activeTab: 'All',
+    dateFilter: 'last_90_days',
+    referenceDate: refDate,
+  });
+  assert.strictEqual(last90.length, 2);
+
+  // Under "Any time", older applications are never removed just because they advanced to another stage
+  const anyTime = filterApplications(apps, {
+    activeTab: 'All',
+    dateFilter: 'any',
+    referenceDate: refDate,
+  });
+  assert.strictEqual(anyTime.length, 2);
+});
+
+test('STU-022: February application excluded from Last 30 days in April across Shortlisted and Interview tabs', () => {
+  // Reference date: April 20, 2026
+  const refDate = new Date('2026-04-20T12:00:00Z');
+
+  const apps = [
+    {
+      id: 'shortlisted-feb',
+      role: 'Backend Dev',
+      companyName: 'CloudWorks',
+      status: 'Shortlisted',
+      appliedAt: new Date('2026-02-10T10:00:00Z').getTime(), // February (69 days ago)
+      updatedAt: new Date('2026-04-18T10:00:00Z').getTime(), // Advanced recently
+    },
+    {
+      id: 'shortlisted-apr',
+      role: 'Backend Dev',
+      companyName: 'DataCorp',
+      status: 'Shortlisted',
+      appliedAt: new Date('2026-04-05T10:00:00Z').getTime(), // April (15 days ago)
+      updatedAt: new Date('2026-04-10T10:00:00Z').getTime(),
+    },
+    {
+      id: 'interview-feb',
+      role: 'ML Engineer',
+      companyName: 'AI Labs',
+      status: 'Interview',
+      appliedAt: new Date('2026-02-15T10:00:00Z').getTime(), // February (64 days ago)
+      updatedAt: new Date('2026-04-19T10:00:00Z').getTime(), // Scheduled recently
+      interviewDate: '2026-04-25T10:00:00Z',
+      interviewTimestamp: new Date('2026-04-25T10:00:00Z').getTime(),
+    },
+    {
+      id: 'interview-apr',
+      role: 'ML Engineer',
+      companyName: 'Neural Works',
+      status: 'Interview',
+      appliedAt: new Date('2026-04-10T10:00:00Z').getTime(), // April (10 days ago)
+      updatedAt: new Date('2026-04-12T10:00:00Z').getTime(),
+      interviewDate: '2026-04-22T10:00:00Z',
+      interviewTimestamp: new Date('2026-04-22T10:00:00Z').getTime(),
+    },
   ];
 
-  // Filter Interview tab within past month
-  const interviewPastMonth = filterApplications(sampleApps, {
-    activeTab: 'Interview',
-    dateFilter: 'past_month',
+  // 1. Shortlisted tab + Last 30 days: only shortlisted-apr appears
+  const shortlisted30 = filterApplications(apps, {
+    activeTab: 'Shortlisted',
+    dateFilter: 'last_30_days',
     referenceDate: refDate,
   });
-  assert.strictEqual(interviewPastMonth.length, 1);
-  assert.strictEqual(interviewPastMonth[0].id, '1');
+  assert.strictEqual(shortlisted30.length, 1);
+  assert.strictEqual(shortlisted30[0].id, 'shortlisted-apr');
 
-  // Filter Interview tab within past 3 months
-  const interviewPast3Months = filterApplications(sampleApps, {
-    activeTab: 'Interview',
-    dateFilter: 'past_3_months',
+  // 2. Shortlisted tab + Any time: both appear
+  const shortlistedAny = filterApplications(apps, {
+    activeTab: 'Shortlisted',
+    dateFilter: 'any',
     referenceDate: refDate,
   });
-  assert.strictEqual(interviewPast3Months.length, 2);
-  assert.deepStrictEqual(interviewPast3Months.map((a) => a.id), ['1', '2']);
+  assert.strictEqual(shortlistedAny.length, 2);
 
-  // Filter Interview tab within past 3 months + search query 'React'
-  const interviewReact3Months = filterApplications(sampleApps, {
+  // 3. Interview tab + Last 30 days: only interview-apr appears
+  const interview30 = filterApplications(apps, {
     activeTab: 'Interview',
-    searchQuery: 'React',
-    dateFilter: 'past_3_months',
+    dateFilter: 'last_30_days',
     referenceDate: refDate,
   });
-  assert.strictEqual(interviewReact3Months.length, 1);
-  assert.strictEqual(interviewReact3Months[0].id, '1');
+  assert.strictEqual(interview30.length, 1);
+  assert.strictEqual(interview30[0].id, 'interview-apr');
+
+  // 4. Interview tab + Any time: both appear
+  const interviewAny = filterApplications(apps, {
+    activeTab: 'Interview',
+    dateFilter: 'any',
+    referenceDate: refDate,
+  });
+  assert.strictEqual(interviewAny.length, 2);
+});
+
+test('STU-022: Date filter combines with search and sorting correctly', () => {
+  const refDate = new Date('2026-11-01T12:00:00Z');
+  const DAY_MS = 24 * 60 * 60 * 1000;
+
+  const apps = [
+    {
+      id: '1',
+      role: 'Lead React Developer',
+      companyName: 'Acme Corp',
+      status: 'Interview',
+      appliedAt: refDate.getTime() - 5 * DAY_MS,
+      interviewDate: '2026-11-10T10:00:00Z',
+      interviewTimestamp: refDate.getTime() + 9 * DAY_MS,
+    },
+    {
+      id: '2',
+      role: 'Junior React Developer',
+      companyName: 'Beta Labs',
+      status: 'Interview',
+      appliedAt: refDate.getTime() - 20 * DAY_MS,
+      interviewDate: '2026-11-05T10:00:00Z',
+      interviewTimestamp: refDate.getTime() + 4 * DAY_MS,
+    },
+    {
+      id: '3',
+      role: 'React Native Engineer',
+      companyName: 'Gamma Corp',
+      status: 'Interview',
+      appliedAt: refDate.getTime() - 50 * DAY_MS, // > 30 days ago
+      interviewDate: '2026-11-03T10:00:00Z',
+      interviewTimestamp: refDate.getTime() + 2 * DAY_MS,
+    },
+  ];
+
+  // Filter: Interview tab, last_30_days, search "react", sorted by "upcoming_interview"
+  const filtered = filterApplications(apps, {
+    activeTab: 'Interview',
+    dateFilter: 'last_30_days',
+    searchQuery: 'react',
+    referenceDate: refDate,
+  });
+  const sorted = sortApplications(filtered, 'upcoming_interview');
+
+  // Gamma Corp is excluded because appliedAt was 50 days ago
+  assert.strictEqual(sorted.length, 2);
+  // Beta Labs has sooner interview (Nov 5) than Acme Corp (Nov 10)
+  assert.strictEqual(sorted[0].id, '2');
+  assert.strictEqual(sorted[1].id, '1');
+});
+
+test('STU-022: Boundary dates are handled consistently (inclusive cutoff)', () => {
+  const refDate = new Date('2026-11-01T12:00:00.000Z');
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const cutoff30 = refDate.getTime() - 30 * DAY_MS;
+
+  // Exactly at the 30-day cutoff boundary -> INCLUDED
+  assert.strictEqual(isWithinDateAppliedRange(cutoff30, 'last_30_days', refDate), true);
+
+  // 1 millisecond after cutoff (newer) -> INCLUDED
+  assert.strictEqual(isWithinDateAppliedRange(cutoff30 + 1, 'last_30_days', refDate), true);
+
+  // 1 millisecond before cutoff (older) -> EXCLUDED
+  assert.strictEqual(isWithinDateAppliedRange(cutoff30 - 1, 'last_30_days', refDate), false);
+
+  // 90-day cutoff boundary
+  const cutoff90 = refDate.getTime() - 90 * DAY_MS;
+  assert.strictEqual(isWithinDateAppliedRange(cutoff90, 'last_90_days', refDate), true);
+  assert.strictEqual(isWithinDateAppliedRange(cutoff90 + 1, 'last_90_days', refDate), true);
+  assert.strictEqual(isWithinDateAppliedRange(cutoff90 - 1, 'last_90_days', refDate), false);
+
+  // 12-month (365 days) cutoff boundary
+  const cutoff365 = refDate.getTime() - 365 * DAY_MS;
+  assert.strictEqual(isWithinDateAppliedRange(cutoff365, 'last_12_months', refDate), true);
+  assert.strictEqual(isWithinDateAppliedRange(cutoff365 + 1, 'last_12_months', refDate), true);
+  assert.strictEqual(isWithinDateAppliedRange(cutoff365 - 1, 'last_12_months', refDate), false);
 });
 
 // ─────────────────────────────────────────────────────────────
