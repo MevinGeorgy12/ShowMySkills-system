@@ -10,6 +10,8 @@ import {
   ArrowRight,
   ArrowLeft,
   CheckCircle2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { authService } from "@/services/apiClient";
 
@@ -20,6 +22,8 @@ export default function ForgotPasswordPage() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -197,13 +201,26 @@ export default function ForgotPasswordPage() {
               <div className="flex items-center h-11 px-3.5 rounded-xl border border-gray-200 bg-gray-50/50 focus-within:border-[#4B9C93] focus-within:bg-white transition-all">
                 <Lock className="w-4 h-4 text-gray-400 shrink-0" />
                 <input
-                  type="password"
+                  type={showNewPassword ? "text" : "password"}
                   required
                   placeholder="••••••••"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-transparent pl-2.5 text-xs sm:text-sm text-gray-900 focus:outline-none"
+                  className="w-full bg-transparent pl-2.5 pr-1.5 text-xs sm:text-sm text-gray-900 focus:outline-none"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  aria-label={showNewPassword ? "Hide password" : "Show password"}
+                  title={showNewPassword ? "Hide password" : "Show password"}
+                  className="p-1 rounded-md text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#4B9C93] shrink-0 transition-colors cursor-pointer"
+                >
+                  {showNewPassword ? (
+                    <EyeOff className="w-4 h-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="w-4 h-4" aria-hidden="true" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -212,13 +229,26 @@ export default function ForgotPasswordPage() {
               <div className="flex items-center h-11 px-3.5 rounded-xl border border-gray-200 bg-gray-50/50 focus-within:border-[#4B9C93] focus-within:bg-white transition-all">
                 <Lock className="w-4 h-4 text-gray-400 shrink-0" />
                 <input
-                  type="password"
+                  type={showConfirmPassword ? "text" : "password"}
                   required
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-transparent pl-2.5 text-xs sm:text-sm text-gray-900 focus:outline-none"
+                  className="w-full bg-transparent pl-2.5 pr-1.5 text-xs sm:text-sm text-gray-900 focus:outline-none"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  title={showConfirmPassword ? "Hide password" : "Show password"}
+                  className="p-1 rounded-md text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#4B9C93] shrink-0 transition-colors cursor-pointer"
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="w-4 h-4" aria-hidden="true" />
+                  ) : (
+                    <Eye className="w-4 h-4" aria-hidden="true" />
+                  )}
+                </button>
               </div>
             </div>
 

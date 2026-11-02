@@ -1,9 +1,18 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { Eye, EyeOff } from 'lucide-react';
 
 export function Signup({ role, config }) {
   const [formData, setFormData] = useState({});
+  const [showPasswords, setShowPasswords] = useState({});
+
+  const togglePasswordVisibility = (fieldName) => {
+    setShowPasswords((prev) => ({
+      ...prev,
+      [fieldName]: !prev[fieldName],
+    }));
+  };
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -77,19 +86,45 @@ export function Signup({ role, config }) {
 
             {/* Dynamic Form Fields from Config */}
             <form onSubmit={handleSubmit} className="space-y-4">
-              {config.fields.map((field, index) => (
-                <div key={index} className="flex flex-col space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">{field.label}</label>
-                  <input
-                    type={field.type}
-                    name={field.name}
-                    placeholder={field.placeholder}
-                    onChange={handleChange}
-                    className="w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#459E93] text-slate-800"
-                    required
-                  />
-                </div>
-              ))}
+              {config.fields.map((field, index) => {
+                const isPassword = field.type === 'password';
+                const isVisible = Boolean(showPasswords[field.name]);
+                const inputType = isPassword ? (isVisible ? 'text' : 'password') : field.type;
+
+                return (
+                  <div key={index} className="flex flex-col space-y-1">
+                    <label className="text-xs font-semibold text-slate-700">{field.label}</label>
+                    <div className="relative flex items-center">
+                      <input
+                        type={inputType}
+                        name={field.name}
+                        placeholder={field.placeholder}
+                        value={formData[field.name] || ''}
+                        onChange={handleChange}
+                        className={`w-full px-4 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#459E93] text-slate-800 ${
+                          isPassword ? 'pr-11' : ''
+                        }`}
+                        required
+                      />
+                      {isPassword && (
+                        <button
+                          type="button"
+                          onClick={() => togglePasswordVisibility(field.name)}
+                          aria-label={isVisible ? 'Hide password' : 'Show password'}
+                          title={isVisible ? 'Hide password' : 'Show password'}
+                          className="absolute right-3 p-1 rounded-md text-slate-400 hover:text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#459E93] transition-colors cursor-pointer"
+                        >
+                          {isVisible ? (
+                            <EyeOff className="w-4 h-4" aria-hidden="true" />
+                          ) : (
+                            <Eye className="w-4 h-4" aria-hidden="true" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
 
               <button
                 type="submit"

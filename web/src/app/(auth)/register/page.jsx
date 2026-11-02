@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Eye, EyeOff } from 'lucide-react';
 import { apiRequest } from '@/services/apiClient';
 
 export default function RegisterPage() {
@@ -21,6 +22,7 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -245,14 +247,29 @@ export default function RegisterPage() {
               Password
             </label>
 
-            <input
-              type="password"
-              name="password"
-              placeholder="Create a password"
-              value={formData.password}
-              onChange={handleChange}
-              className={inputClass}
-            />
+            <div className="relative flex items-center">
+              <input
+                type={showPassword ? "text" : "password"}
+                name="password"
+                placeholder="Create a password"
+                value={formData.password}
+                onChange={handleChange}
+                className={`${inputClass} pr-11`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-3 p-1 rounded-md text-slate-400 hover:text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#459E93] transition-colors cursor-pointer"
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" aria-hidden="true" />
+                ) : (
+                  <Eye className="w-4 h-4" aria-hidden="true" />
+                )}
+              </button>
+            </div>
           </div>
 
           {/* College */}

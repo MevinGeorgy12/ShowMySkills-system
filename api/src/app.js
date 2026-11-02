@@ -186,14 +186,28 @@ app.use((err, req, res, next) => {
     console.error(`[Error] ${req.method} ${req.url}:`, err.stack || err.message);
   }
 
-  const message =
-    isProduction && statusCode === 500
-      ? 'An unexpected internal server error occurred.'
-      : err.message || 'Internal Server Error';
+  // Detect technical database/socket driver errors to prevent leaking internal infrastructure details
+  const isTechnicalDbError =
+    err.isDatabaseError ||
+    err.name === 'MongoServerSelectionError' ||
+    err.name === 'MongoNetworkError' ||
+    err.name === 'MongoTimeoutError' ||
+    (typeof err.message === 'string' &&
+      (err.message.includes('connectTimeoutMS') ||
+        err.message.includes('secureConnect') ||
+        err.message.includes('Topology') ||
+        err.message.includes('ECONNREFUSED')));
 
-  res.status(statusCode).json({
+  let message = err.message || 'Internal Server Error';
+  if (isTechnicalDbError) {
+    message = 'Database service is temporarily unavailable. Please try again in a moment.';
+  } else if (statusCode >= 500) {
+    message = 'An unexpected internal server error occurred.';
+  }
+
+  res.status(isTechnicalDbError && statusCode === 500 ? 503 : statusCode).json({
     success: false,
-    error: err.name || 'Error',
+    error: isTechnicalDbError ? 'ServiceUnavailable' : (err.name || 'Error'),
     message,
     ...(isProduction ? {} : { stack: err.stack }),
   });

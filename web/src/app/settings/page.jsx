@@ -15,6 +15,8 @@ import {
   Mail,
   Phone,
   Camera,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import DashboardSidebar from "@/components/DashboardSidebar";
 import DashboardHeader from "@/components/DashboardHeader";
@@ -75,6 +77,9 @@ export default function SettingsPage() {
     newPass: "",
     confirmPass: "",
   });
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [twoFactor, setTwoFactor] = useState(false);
 
   // Notification toggles
@@ -292,37 +297,82 @@ export default function SettingsPage() {
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
                       Current Password
                     </label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      value={passwords.current}
-                      onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs sm:text-sm focus:outline-none focus:border-[#4B9C93]"
-                    />
+                    <div className="relative flex items-center">
+                      <input
+                        type={showCurrentPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={passwords.current}
+                        onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
+                        className="w-full px-3.5 pr-10 py-2 rounded-xl border border-gray-200 text-xs sm:text-sm focus:outline-none focus:border-[#4B9C93]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                        aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                        title={showCurrentPassword ? "Hide password" : "Show password"}
+                        className="absolute right-3 p-1 rounded-md text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#4B9C93] transition-colors cursor-pointer"
+                      >
+                        {showCurrentPassword ? (
+                          <EyeOff className="w-4 h-4" aria-hidden="true" />
+                        ) : (
+                          <Eye className="w-4 h-4" aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
                       New Password
                     </label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      value={passwords.newPass}
-                      onChange={(e) => setPasswords({ ...passwords, newPass: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs sm:text-sm focus:outline-none focus:border-[#4B9C93]"
-                    />
+                    <div className="relative flex items-center">
+                      <input
+                        type={showNewPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={passwords.newPass}
+                        onChange={(e) => setPasswords({ ...passwords, newPass: e.target.value })}
+                        className="w-full px-3.5 pr-10 py-2 rounded-xl border border-gray-200 text-xs sm:text-sm focus:outline-none focus:border-[#4B9C93]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        aria-label={showNewPassword ? "Hide password" : "Show password"}
+                        title={showNewPassword ? "Hide password" : "Show password"}
+                        className="absolute right-3 p-1 rounded-md text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#4B9C93] transition-colors cursor-pointer"
+                      >
+                        {showNewPassword ? (
+                          <EyeOff className="w-4 h-4" aria-hidden="true" />
+                        ) : (
+                          <Eye className="w-4 h-4" aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">
                       Confirm New Password
                     </label>
-                    <input
-                      type="password"
-                      placeholder="••••••••"
-                      value={passwords.confirmPass}
-                      onChange={(e) => setPasswords({ ...passwords, confirmPass: e.target.value })}
-                      className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-xs sm:text-sm focus:outline-none focus:border-[#4B9C93]"
-                    />
+                    <div className="relative flex items-center">
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="••••••••"
+                        value={passwords.confirmPass}
+                        onChange={(e) => setPasswords({ ...passwords, confirmPass: e.target.value })}
+                        className="w-full px-3.5 pr-10 py-2 rounded-xl border border-gray-200 text-xs sm:text-sm focus:outline-none focus:border-[#4B9C93]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                        title={showConfirmPassword ? "Hide password" : "Show password"}
+                        className="absolute right-3 p-1 rounded-md text-gray-400 hover:text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#4B9C93] transition-colors cursor-pointer"
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="w-4 h-4" aria-hidden="true" />
+                        ) : (
+                          <Eye className="w-4 h-4" aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

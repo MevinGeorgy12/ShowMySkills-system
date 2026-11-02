@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { authService } from "@/services/apiClient";
 
 const signupRoleConfigs = {
@@ -421,6 +422,8 @@ function SignupFormContent() {
   const [website, setWebsite] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -1499,13 +1502,26 @@ function SignupFormContent() {
                       />
                     </svg>
                     <input
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full bg-transparent pl-2 text-xs sm:text-sm text-[#1F2937] placeholder:text-[#4A5565]/80 focus:outline-none"
+                      className="w-full bg-transparent pl-2 pr-1.5 text-xs sm:text-sm text-[#1F2937] placeholder:text-[#4A5565]/80 focus:outline-none"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      title={showPassword ? "Hide password" : "Show password"}
+                      className="p-1 rounded text-[#4A5565] hover:text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-[#4B9C93] shrink-0 transition-colors cursor-pointer"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
+                      ) : (
+                        <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -1528,13 +1544,26 @@ function SignupFormContent() {
                       />
                     </svg>
                     <input
-                      type="password"
+                      type={showConfirmPassword ? "text" : "password"}
                       required
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full bg-transparent pl-2 text-xs sm:text-sm text-[#1F2937] placeholder:text-[#4A5565]/80 focus:outline-none"
+                      className="w-full bg-transparent pl-2 pr-1.5 text-xs sm:text-sm text-[#1F2937] placeholder:text-[#4A5565]/80 focus:outline-none"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                      title={showConfirmPassword ? "Hide password" : "Show password"}
+                      className="p-1 rounded text-[#4A5565] hover:text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-[#4B9C93] shrink-0 transition-colors cursor-pointer"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />
+                      ) : (
+                        <Eye className="w-3.5 h-3.5" aria-hidden="true" />
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>

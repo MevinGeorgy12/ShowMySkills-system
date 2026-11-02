@@ -69,19 +69,45 @@ export const userService = {
       query.role = role;
     }
 
-    const user =
-      (await User.findOne(query)) ||
-      (role ? await User.findOne({ email: normalizedEmail }) : null);
+    // Pre-check database readiness to avoid hanging on disconnected cluster
+    if (mongoose.connection.readyState !== 1) {
+      const error = new Error('Database service is temporarily unavailable');
+      error.statusCode = 503;
+      error.isDatabaseError = true;
+      throw error;
+    }
+
+    let user;
+    try {
+      user =
+        (await User.findOne(query)) ||
+        (role ? await User.findOne({ email: normalizedEmail }) : null);
+    } catch (dbErr) {
+      if (
+        dbErr.name === 'MongoServerSelectionError' ||
+        dbErr.name === 'MongoNetworkError' ||
+        dbErr.name === 'MongoTimeoutError' ||
+        dbErr.message?.includes('timed out') ||
+        dbErr.message?.includes('ECONNREFUSED')
+      ) {
+        const error = new Error('Database service is temporarily unavailable');
+        error.statusCode = 503;
+        error.isDatabaseError = true;
+        error.originalError = dbErr;
+        throw error;
+      }
+      throw dbErr;
+    }
 
     if (!user) {
-      const error = new Error('Invalid email or password');
+      const error = new Error('Email or password is incorrect.');
       error.statusCode = 401;
       throw error;
     }
 
     const passwordMatches = await bcrypt.compare(password, user.password);
     if (!passwordMatches) {
-      const error = new Error('Invalid email or password');
+      const error = new Error('Email or password is incorrect.');
       error.statusCode = 401;
       throw error;
     }

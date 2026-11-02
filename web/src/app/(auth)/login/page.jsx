@@ -3,6 +3,7 @@
 import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { authService } from "@/services/apiClient";
 
 const roleConfigs = {
@@ -50,6 +51,7 @@ function LoginFormContent() {
   );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -78,7 +80,32 @@ function LoginFormContent() {
       setLoading(false);
       router.push(config.dashboardRoute);
     } catch (err) {
-      setError(err.message || "Failed to log in. Please check your credentials.");
+      // Keep browser/network details out of the user-facing form. They are
+      // still useful to developers while diagnosing a failed request.
+      console.error("Login request failed:", err);
+
+      const status = err?.status || err?.data?.statusCode;
+      const rawMsg = String(err?.message || err?.data?.message || "").toLowerCase();
+
+      if (
+        status === 401 ||
+        status === 400 ||
+        rawMsg.includes("invalid") ||
+        rawMsg.includes("incorrect") ||
+        rawMsg.includes("password") ||
+        rawMsg.includes("credential")
+      ) {
+        setError("Email or password is incorrect.");
+      } else if (
+        status === 429 ||
+        rawMsg.includes("too many") ||
+        rawMsg.includes("rate limit")
+      ) {
+        setError("Too many login attempts. Please try again in a moment.");
+      } else {
+        // Friendly message for server, connection, database, or socket problems
+        setError("We couldn’t sign you in right now. Please try again in a moment.");
+      }
       setLoading(false);
     }
   };
@@ -212,13 +239,26 @@ function LoginFormContent() {
                 <path d="M4.66667 7.33324V4.66636C4.66667 3.78224 5.01786 2.93432 5.64298 2.30915C6.2681 1.68398 7.11595 1.33276 8 1.33276C8.88406 1.33276 9.7319 1.68398 10.357 2.30915C10.9821 2.93432 11.3333 3.78224 11.3333 4.66636V7.33324M4.66667 7.33324H3.33333C2.59695 7.33324 2 7.93025 2 8.66668V13.3337C2 14.0702 2.59695 14.6672 3.33333 14.6672H12.6667C13.403 14.6672 14 14.0702 14 13.3337V8.66668C14 7.93025 13.403 7.33324 12.6667 7.33324H11.3333M4.66667 7.33324H11.3333" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               </svg>
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-transparent pl-2.5 text-sm text-[#1F2937] placeholder:text-[#4A5565]/80 focus:outline-none"
+                className="w-full bg-transparent pl-2.5 pr-2 text-sm text-[#1F2937] placeholder:text-[#4A5565]/80 focus:outline-none"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+                className="p-1 rounded-md text-[#4A5565] hover:text-[#1F2937] focus:outline-none focus:ring-1 focus:ring-[#4B9C93] shrink-0 transition-colors cursor-pointer"
+              >
+                {showPassword ? (
+                  <EyeOff className="w-4 h-4" aria-hidden="true" />
+                ) : (
+                  <Eye className="w-4 h-4" aria-hidden="true" />
+                )}
+              </button>
             </div>
             {/* Forgot Password Link */}
             <div className="flex justify-end pt-1">
