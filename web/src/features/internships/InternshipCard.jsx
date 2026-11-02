@@ -175,7 +175,7 @@ export default function InternshipCard({
       dragElastic={0.7}
       onDragEnd={handleDragEnd}
       whileTap={isTopCard ? { cursor: "grabbing" } : {}}
-      className={`absolute top-0 left-0 w-full h-full aspect-square bg-white rounded-2xl shadow-xl shadow-black/8 border border-gray-100 overflow-hidden select-none flex flex-col justify-between ${
+      className={`absolute top-0 left-0 w-full h-full bg-white rounded-2xl shadow-xl shadow-black/8 border border-gray-100 overflow-hidden select-none flex flex-col justify-between ${
         isTopCard
           ? "cursor-grab active:cursor-grabbing"
           : "pointer-events-none"
@@ -204,7 +204,7 @@ export default function InternshipCard({
       )}
 
       {/* Company logo / image area (fills remaining balance space) */}
-      <div className="relative px-5 sm:px-6 pt-4 pb-2.5 flex-1 min-h-[120px] flex flex-col">
+      <div className="relative px-5 sm:px-6 pt-3.5 pb-2 flex-1 min-h-[80px] flex flex-col">
         <div className="w-full h-full rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 flex flex-col items-center justify-center gap-1 overflow-hidden">
           {internship.companyLogo ? (
             <img
