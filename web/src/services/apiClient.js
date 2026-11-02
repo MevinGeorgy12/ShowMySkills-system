@@ -473,6 +473,10 @@ export const internshipService = {
     return apiRequest(`/internships/${id}`, "PUT", internshipData);
   },
 
+  delete: async (id) => {
+    return apiRequest(`/internships/${id}`, "DELETE");
+  },
+
   apply: async (internshipId, notes = "") => {
     return apiRequest("/applications/apply", "POST", { internshipId, notes });
   },

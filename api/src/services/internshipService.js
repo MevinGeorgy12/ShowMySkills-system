@@ -26,6 +26,10 @@ export const getInternships = async (query) => {
     filter.company = new RegExp(String(query.company).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   }
 
+  if (query.postedBy) {
+    filter.postedBy = query.postedBy;
+  }
+
   if (query.location) {
     filter.location = {
       $regex: String(query.location).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
