@@ -613,3 +613,12 @@ export const supportService = {
     return apiRequest("/support/tickets", "POST", ticketData);
   },
 };
+
+export const uploadService = {
+  uploadInternshipPoster: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiRequest("/upload/internship-poster", "POST", formData);
+  },
+};
+
