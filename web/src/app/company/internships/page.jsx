@@ -24,10 +24,13 @@ import {
   Check,
   Building2,
   ShieldAlert,
+  Upload,
+  Image as ImageIcon,
+  Wallet,
 } from "lucide-react";
 import DashboardSidebar from "@/components/DashboardSidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import { internshipService, authService } from "@/services/apiClient";
+import { internshipService, authService, uploadService } from "@/services/apiClient";
 
 const PREDEFINED_DEPARTMENTS = [
   "Engineering",
@@ -51,6 +54,22 @@ const DEPARTMENT_TRACK_MAP = {
   "AI & Data": "AI, Machine Learning & Data",
   Product: "Product Management",
   Marketing: "Growth & Technical Marketing",
+};
+
+const PRESET_DURATIONS = ["1 Month", "2 Months", "3 Months", "6 Months"];
+
+const parseDuration = (rawDuration) => {
+  if (!rawDuration) return { choice: "", customVal: "", customUnit: "Months" };
+  const trimmed = rawDuration.trim();
+  if (PRESET_DURATIONS.includes(trimmed)) {
+    return { choice: trimmed, customVal: "", customUnit: "Months" };
+  }
+  const match = trimmed.match(/^(\d+)\s*(weeks?|months?)/i);
+  if (match) {
+    const unit = match[2].toLowerCase().startsWith("week") ? "Weeks" : "Months";
+    return { choice: "custom", customVal: match[1], customUnit: unit };
+  }
+  return { choice: "custom", customVal: trimmed.replace(/\D/g, "") || "", customUnit: "Months" };
 };
 
 export default function CompanyInternshipsPage() {
@@ -78,16 +97,22 @@ export default function CompanyInternshipsPage() {
     role: "",
     department: "Engineering",
     track: "Development",
-    mode: "remote",
-    location: "Remote",
-    stipend: "₹25,000 / month",
-    duration: "3 Months",
-    skills: "",
-    description: "",
     customDepartment: "",
     customTrack: "",
     isCustomDepartment: false,
     isCustomTrack: false,
+    mode: "remote",
+    location: "",
+    durationChoice: "",
+    customDurationValue: "",
+    customDurationUnit: "Months",
+    skills: "",
+    compensationType: "paid",
+    stipendMin: "",
+    stipendMax: "",
+    description: "",
+    posterImage: "",
+    posterUploading: false,
     saving: false,
     errors: {},
   });
@@ -98,16 +123,22 @@ export default function CompanyInternshipsPage() {
     role: "",
     department: "Engineering",
     track: "Development",
-    mode: "remote",
-    location: "Remote",
-    stipend: "₹25,000 / month",
-    duration: "3 Months",
-    skills: "React, Node.js, TypeScript",
-    description: "",
     customDepartment: "",
     customTrack: "",
     isCustomDepartment: false,
     isCustomTrack: false,
+    mode: "remote",
+    location: "",
+    durationChoice: "",
+    customDurationValue: "",
+    customDurationUnit: "Months",
+    skills: "",
+    compensationType: "paid",
+    stipendMin: "",
+    stipendMax: "",
+    description: "",
+    posterImage: "",
+    posterUploading: false,
     saving: false,
     errors: {},
   });
@@ -180,22 +211,32 @@ export default function CompanyInternshipsPage() {
       (item.role || "").toLowerCase().includes(q) ||
       (item.department || "").toLowerCase().includes(q) ||
       (item.track || "").toLowerCase().includes(q) ||
-      (item.location || "").toLowerCase().includes(q) ||
-      (item.skills || []).some((s) => String(s).toLowerCase().includes(q));
+      (Array.isArray(item.skills) &&
+        item.skills.some((s) => (s || "").toLowerCase().includes(q)));
 
     return matchesStatus && matchesSearch;
   });
 
-  // Action: Toggle Status (Close / Reopen)
+  // Action: Open Confirmation Modal
+  const handleOpenConfirm = (internship, type) => {
+    setConfirmModal({
+      isOpen: true,
+      type,
+      internship,
+      processing: false,
+    });
+  };
+
+  // Action: Close or Reopen Posting
   const handleExecuteStatusChange = async () => {
-    const { type, internship } = confirmModal;
+    const { internship, type } = confirmModal;
     if (!internship) return;
 
     setConfirmModal((prev) => ({ ...prev, processing: true }));
+    const id = internship._id || internship.id;
     const newStatus = type === "close" ? "closed" : "active";
 
     try {
-      const id = internship._id || internship.id;
       await internshipService.update(id, { status: newStatus });
 
       setInternships((prev) =>
@@ -239,6 +280,15 @@ export default function CompanyInternshipsPage() {
   const handleOpenEdit = (internship) => {
     const isPredefinedDept = PREDEFINED_DEPARTMENTS.includes(internship.department || "");
     const isPredefinedTrk = PREDEFINED_TRACKS.includes(internship.track || "");
+    const parsedDur = parseDuration(internship.duration);
+
+    const compType =
+      internship.compensationType ||
+      (internship.stipendText === "Unpaid" || internship.stipend === "Unpaid"
+        ? "unpaid"
+        : internship.stipendMin > 0
+        ? "paid"
+        : "paid");
 
     setEditModal({
       isOpen: true,
@@ -251,55 +301,221 @@ export default function CompanyInternshipsPage() {
       isCustomDepartment: !isPredefinedDept && Boolean(internship.department),
       isCustomTrack: !isPredefinedTrk && Boolean(internship.track),
       mode: internship.mode || "remote",
-      location: internship.location || "Remote",
-      stipend: internship.stipendText || "Competitive",
-      duration: internship.duration || "3 Months",
+      location: internship.mode === "remote" ? "" : internship.location || "",
+      durationChoice: parsedDur.choice,
+      customDurationValue: parsedDur.customVal,
+      customDurationUnit: parsedDur.customUnit,
       skills: Array.isArray(internship.skills) ? internship.skills.join(", ") : "",
+      compensationType: compType,
+      stipendMin: internship.stipendMin != null && internship.stipendMin > 0 ? String(internship.stipendMin) : "",
+      stipendMax: internship.stipendMax != null && internship.stipendMax > 0 ? String(internship.stipendMax) : "",
       description: internship.description || "",
+      posterImage: internship.posterImage || "",
+      posterUploading: false,
       saving: false,
       errors: {},
     });
   };
 
+  // Validate Posting Form State
+  const validateForm = (formState) => {
+    const errors = {};
+
+    if (!formState.role.trim()) {
+      errors.role = "Role title is required";
+    }
+
+    const finalDepartment = formState.isCustomDepartment
+      ? formState.customDepartment.trim()
+      : formState.department;
+    if (!finalDepartment) {
+      errors.department = "Department cannot be empty";
+    }
+
+    const finalTrack = formState.isCustomTrack
+      ? formState.customTrack.trim()
+      : formState.track;
+    if (!finalTrack) {
+      errors.track = "Track cannot be empty";
+    }
+
+    // Location validation: required for onsite/hybrid, disabled/cleared for remote
+    if (formState.mode === "onsite" || formState.mode === "hybrid") {
+      if (!formState.location.trim()) {
+        errors.location = "Location is required for Onsite and Hybrid work modes";
+      }
+    }
+
+    // Duration validation: required, reject blank, 0, or negative
+    if (!formState.durationChoice) {
+      errors.duration = "Duration is required";
+    } else if (formState.durationChoice === "custom") {
+      const val = Number(formState.customDurationValue);
+      if (!formState.customDurationValue.toString().trim() || Number.isNaN(val) || val <= 0) {
+        errors.duration = "Please enter a positive duration value (e.g. 10 Weeks or 4 Months)";
+      }
+    }
+
+    // Required skills validation: mandatory, at least one skill
+    const skillsArray = formState.skills
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (skillsArray.length === 0) {
+      errors.skills = "At least one required skill must be provided";
+    }
+
+    // Compensation validation
+    if (formState.compensationType === "paid") {
+      const min = formState.stipendMin !== "" ? Number(formState.stipendMin) : NaN;
+      const max = formState.stipendMax !== "" ? Number(formState.stipendMax) : NaN;
+
+      if (Number.isNaN(min) || Number.isNaN(max)) {
+        errors.stipend = "Both minimum and maximum monthly stipend amounts are required for Paid internships";
+      } else if (min < 0 || max < 0) {
+        errors.stipend = "Stipend amounts cannot be negative";
+      } else if (max <= min) {
+        errors.stipend = "Maximum stipend must be greater than minimum stipend";
+      }
+    } else if (formState.compensationType === "flexible") {
+      const hasMin = formState.stipendMin !== "" && formState.stipendMin !== null;
+      const hasMax = formState.stipendMax !== "" && formState.stipendMax !== null;
+      if (hasMin || hasMax) {
+        const min = Number(formState.stipendMin);
+        const max = Number(formState.stipendMax);
+        if (Number.isNaN(min) || Number.isNaN(max)) {
+          errors.stipend = "Both minimum and maximum stipend amounts must be specified if entered";
+        } else if (min < 0 || max < 0) {
+          errors.stipend = "Stipend amounts cannot be negative";
+        } else if (max <= min) {
+          errors.stipend = "Maximum stipend must be greater than minimum stipend";
+        }
+      }
+    }
+
+    return { errors, isValid: Object.keys(errors).length === 0 };
+  };
+
+  // Build Payload
+  const buildPayload = (formState, companyName) => {
+    const finalDepartment = formState.isCustomDepartment
+      ? formState.customDepartment.trim()
+      : formState.department;
+    const finalTrack = formState.isCustomTrack
+      ? formState.customTrack.trim()
+      : formState.track;
+
+    const resolvedDuration =
+      formState.durationChoice === "custom"
+        ? `${Number(formState.customDurationValue)} ${formState.customDurationUnit}`
+        : formState.durationChoice;
+
+    const skillsArray = formState.skills
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const payload = {
+      role: formState.role.trim(),
+      company: companyName,
+      department: finalDepartment,
+      track: finalTrack,
+      mode: formState.mode,
+      location: formState.mode === "remote" ? "" : formState.location.trim(),
+      duration: resolvedDuration,
+      skills: skillsArray,
+      description: formState.description.trim(),
+      compensationType: formState.compensationType,
+      posterImage: formState.posterImage || "",
+    };
+
+    if (formState.compensationType === "paid") {
+      const min = Number(formState.stipendMin);
+      const max = Number(formState.stipendMax);
+      payload.stipendMin = min;
+      payload.stipendMax = max;
+      payload.stipendText = `₹${min.toLocaleString("en-IN")} - ₹${max.toLocaleString("en-IN")} / month`;
+      payload.stipend = payload.stipendText;
+    } else if (formState.compensationType === "unpaid") {
+      payload.stipendMin = 0;
+      payload.stipendMax = 0;
+      payload.stipendText = "Unpaid";
+      payload.stipend = "Unpaid";
+    } else if (formState.compensationType === "flexible") {
+      if (formState.stipendMin !== "" && formState.stipendMax !== "") {
+        const min = Number(formState.stipendMin);
+        const max = Number(formState.stipendMax);
+        payload.stipendMin = min;
+        payload.stipendMax = max;
+        payload.stipendText = `₹${min.toLocaleString("en-IN")} - ₹${max.toLocaleString("en-IN")} / month (Flexible)`;
+        payload.stipend = payload.stipendText;
+      } else {
+        payload.stipendMin = 0;
+        payload.stipendMax = 0;
+        payload.stipendText = "Flexible";
+        payload.stipend = "Flexible";
+      }
+    }
+
+    return payload;
+  };
+
+  // Image Upload Handler
+  const handleUploadFile = async (e, setModalState) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!["image/jpeg", "image/png", "image/webp", "image/svg+xml"].includes(file.type)) {
+      alert("Invalid format. Please upload JPEG, PNG, or WebP.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File exceeds maximum size of 5MB.");
+      return;
+    }
+
+    setModalState((prev) => ({
+      ...prev,
+      posterUploading: true,
+      errors: { ...prev.errors, poster: "" },
+    }));
+
+    try {
+      const res = await uploadService.uploadInternshipPoster(file);
+      const url = res?.data?.url || res?.url;
+      if (url) {
+        setModalState((prev) => ({
+          ...prev,
+          posterImage: url,
+          posterUploading: false,
+        }));
+      } else {
+        throw new Error("Upload did not return a valid URL");
+      }
+    } catch (err) {
+      setModalState((prev) => ({
+        ...prev,
+        posterUploading: false,
+        errors: { ...prev.errors, poster: err?.message || "Failed to upload image" },
+      }));
+    }
+  };
+
   // Save Edit
   const handleSaveEdit = async (e) => {
     e.preventDefault();
-    const errors = {};
+    const { errors, isValid } = validateForm(editModal);
 
-    if (!editModal.role.trim()) errors.role = "Role title is required";
-    const finalDepartment = editModal.isCustomDepartment
-      ? editModal.customDepartment.trim()
-      : editModal.department;
-    if (!finalDepartment) errors.department = "Department cannot be empty";
-
-    const finalTrack = editModal.isCustomTrack
-      ? editModal.customTrack.trim()
-      : editModal.track;
-    if (!finalTrack) errors.track = "Track cannot be empty";
-
-    if (Object.keys(errors).length > 0) {
+    if (!isValid) {
       setEditModal((prev) => ({ ...prev, errors }));
       return;
     }
 
     setEditModal((prev) => ({ ...prev, saving: true }));
     const id = editModal.internship._id || editModal.internship.id;
-
-    const payload = {
-      role: editModal.role.trim(),
-      department: finalDepartment,
-      track: finalTrack,
-      mode: editModal.mode,
-      location: editModal.location.trim(),
-      stipend: editModal.stipend.trim(),
-      stipendText: editModal.stipend.trim(),
-      duration: editModal.duration.trim(),
-      skills: editModal.skills
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      description: editModal.description.trim(),
-    };
+    const companyName = editModal.internship.company || currentUser?.companyProfile?.companyName || "My Company";
+    const payload = buildPayload(editModal, companyName);
 
     try {
       const updated = await internshipService.update(id, payload);
@@ -322,79 +538,88 @@ export default function CompanyInternshipsPage() {
   // Save Create
   const handleSaveCreate = async (e) => {
     e.preventDefault();
-    const errors = {};
+    const { errors, isValid } = validateForm(createModal);
 
-    if (!createModal.role.trim()) errors.role = "Role title is required";
-    const finalDepartment = createModal.isCustomDepartment
-      ? createModal.customDepartment.trim()
-      : createModal.department;
-    if (!finalDepartment) errors.department = "Department cannot be empty";
-
-    const finalTrack = createModal.isCustomTrack
-      ? createModal.customTrack.trim()
-      : createModal.track;
-    if (!finalTrack) errors.track = "Track cannot be empty";
-
-    if (Object.keys(errors).length > 0) {
+    if (!isValid) {
       setCreateModal((prev) => ({ ...prev, errors }));
       return;
     }
 
     setCreateModal((prev) => ({ ...prev, saving: true }));
-
+    const companyName = currentUser?.companyProfile?.companyName || currentUser?.name || "My Company";
     const payload = {
-      role: createModal.role.trim(),
-      company: currentUser?.companyProfile?.companyName || currentUser?.name || "My Company",
-      department: finalDepartment,
-      track: finalTrack,
-      mode: createModal.mode,
-      location: createModal.location.trim(),
-      stipend: createModal.stipend.trim(),
-      stipendText: createModal.stipend.trim(),
-      duration: createModal.duration.trim(),
-      skills: createModal.skills
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      description: createModal.description.trim(),
+      ...buildPayload(createModal, companyName),
       status: "active",
     };
 
     try {
-      const created = await internshipService.create(payload);
-      if (created) {
-        setInternships((prev) => [created, ...prev]);
-      } else {
-        await fetchCompanyPostings(currentUser);
-      }
-      showToast("New internship opening posted successfully!");
-      setCreateModal((prev) => ({ ...prev, isOpen: false, saving: false }));
+      const res = await internshipService.create(payload);
+      const createdItem = res?.data || res || payload;
+      setInternships((prev) => [createdItem, ...prev]);
+      showToast("Internship posting published successfully!");
+
+      setCreateModal({
+        isOpen: false,
+        role: "",
+        department: "Engineering",
+        track: "Development",
+        customDepartment: "",
+        customTrack: "",
+        isCustomDepartment: false,
+        isCustomTrack: false,
+        mode: "remote",
+        location: "",
+        durationChoice: "",
+        customDurationValue: "",
+        customDurationUnit: "Months",
+        skills: "",
+        compensationType: "paid",
+        stipendMin: "",
+        stipendMax: "",
+        description: "",
+        posterImage: "",
+        posterUploading: false,
+        saving: false,
+        errors: {},
+      });
     } catch (err) {
       setCreateModal((prev) => ({
         ...prev,
         saving: false,
-        errors: { submit: err?.message || "Failed to create internship posting" },
+        errors: { submit: err?.message || "Failed to publish internship opening" },
       }));
     }
   };
 
-  // Metrics
+  // Format Display Stipend for company management list
+  const formatCardStipend = (item) => {
+    if (item.compensationType === "unpaid" || item.stipend === "Unpaid" || item.stipendText === "Unpaid") {
+      return "Unpaid";
+    }
+    const min = item.stipendMin;
+    const max = item.stipendMax;
+    if (min != null && max != null && (min > 0 || max > 0)) {
+      return `₹${Number(min).toLocaleString("en-IN")} - ₹${Number(max).toLocaleString("en-IN")}/mo`;
+    }
+    if (item.stipendText) return item.stipendText;
+    if (item.stipend) return item.stipend;
+    if (item.compensationType === "flexible") return "Flexible";
+    return "Unpaid";
+  };
+
   const activeCount = internships.filter((i) => i.status === "active").length;
-  const closedCount = internships.filter((i) => i.status === "closed").length;
-  const totalApplicants = internships.reduce(
-    (acc, i) => acc + (Number(i.applicantsCount) || 0),
-    0
-  );
+  const closedCount = internships.filter((i) => i.status !== "active").length;
+  const totalApplicants = internships.reduce((sum, item) => sum + (item.applicantsCount || 0), 0);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
       <DashboardSidebar />
 
-      <main className="flex-1 md:ml-[220px] flex flex-col min-w-0 pb-16">
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         <DashboardHeader />
 
-        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6">
-          {/* Header */}
+        <main className="flex-1 p-6 sm:p-8 max-w-7xl w-full mx-auto space-y-6">
+          {/* Header title & Post CTA */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-50 border border-teal-200 text-[#2b8a78] text-[11px] font-semibold mb-1.5">
@@ -534,29 +759,39 @@ export default function CompanyInternshipsPage() {
             </div>
           </div>
 
-          {/* Postings Content Area */}
-          {loading ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
-              <div className="w-8 h-8 border-4 border-[#4B9C93]/20 border-t-[#4B9C93] rounded-full animate-spin mx-auto" />
-              <p className="text-xs text-slate-500">Loading your internship postings...</p>
+          {/* Loading State */}
+          {loading && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center space-y-4 shadow-xs">
+              <div className="w-10 h-10 border-4 border-[#4B9C93]/20 border-t-[#4B9C93] rounded-full animate-spin mx-auto" />
+              <div>
+                <h3 className="font-bold text-slate-800 text-sm">Loading your postings</h3>
+                <p className="text-xs text-slate-500 mt-1">Retrieving company internship listings...</p>
+              </div>
             </div>
-          ) : error ? (
-            <div className="bg-white rounded-2xl border border-rose-200 p-8 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto">
+          )}
+
+          {/* Error State */}
+          {!loading && error && (
+            <div className="bg-white rounded-2xl border border-rose-200 p-8 text-center space-y-3 shadow-xs">
+              <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <h3 className="font-bold text-sm text-slate-900">Failed to load postings</h3>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">{error}</p>
               <button
                 onClick={() => currentUser && fetchCompanyPostings(currentUser)}
-                className="px-4 py-2 bg-[#4B9C93] text-white text-xs font-semibold rounded-xl hover:bg-[#3d867e] transition-colors"
+                className="mt-2 px-4 py-2 bg-[#4B9C93] hover:bg-[#3d867e] text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5 cursor-pointer"
               >
-                Try Again
+                <RotateCcw className="w-3.5 h-3.5" />
+                Retry
               </button>
             </div>
-          ) : filteredInternships.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3">
-              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+          )}
+
+          {/* Empty State */}
+          {!loading && !error && filteredInternships.length === 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-3 shadow-xs">
+              <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
                 <Briefcase className="w-6 h-6" />
               </div>
               <h3 className="font-bold text-sm text-slate-800">
@@ -588,7 +823,10 @@ export default function CompanyInternshipsPage() {
                 </button>
               )}
             </div>
-          ) : (
+          )}
+
+          {/* Postings List */}
+          {!loading && !error && filteredInternships.length > 0 && (
             <div className="space-y-4">
               {filteredInternships.map((internship) => {
                 const id = internship._id || internship.id;
@@ -607,42 +845,66 @@ export default function CompanyInternshipsPage() {
                     className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all p-5 sm:p-6 space-y-4"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2.5">
-                          <h3 className="font-bold text-base text-slate-900">
-                            {internship.role}
-                          </h3>
-                          {/* Status Badge */}
-                          {isOpen ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              Open & Accepting Applications
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                              <XCircle className="w-3.5 h-3.5" />
-                              Closed
-                            </span>
-                          )}
-                        </div>
+                      <div className="flex items-start gap-4">
+                        {/* Poster or Logo Thumbnail */}
+                        {internship.posterImage ? (
+                          <div className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100">
+                            <img
+                              src={internship.posterImage}
+                              alt={internship.role}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-14 h-14 rounded-xl border border-slate-200 shrink-0 bg-teal-50 text-[#2b8a78] flex items-center justify-center font-bold text-lg select-none">
+                            {(internship.company || "C").slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
 
-                        {/* Metadata row */}
-                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 pt-0.5">
-                          <span className="font-semibold text-[#4B9C93]">
-                            {internship.department || "General"}
-                            {internship.track && ` • ${internship.track}`}
-                          </span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                            {internship.location || "Remote"} ({internship.mode || "remote"})
-                          </span>
-                          <span>•</span>
-                          <span className="font-medium text-slate-700">
-                            {internship.stipendText || "Competitive"}
-                          </span>
-                          <span>•</span>
-                          <span>Posted on {datePosted}</span>
+                        <div className="space-y-1.5">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <h3 className="font-bold text-base text-slate-900">
+                              {internship.role}
+                            </h3>
+                            {/* Status Badge */}
+                            {isOpen ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                Open & Accepting Applications
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                <XCircle className="w-3.5 h-3.5" />
+                                Closed
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Metadata row */}
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 pt-0.5">
+                            <span className="font-semibold text-[#4B9C93]">
+                              {internship.department || "General"}
+                              {internship.track && ` • ${internship.track}`}
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                              {internship.mode === "remote"
+                                ? "Remote"
+                                : `${internship.location || "Onsite"} (${internship.mode || "onsite"})`}
+                            </span>
+                            <span>•</span>
+                            <span className="font-medium text-slate-700">
+                              {formatCardStipend(internship)}
+                            </span>
+                            <span>•</span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              {internship.duration || "N/A"}
+                            </span>
+                            <span>•</span>
+                            <span>Posted {datePosted}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -650,118 +912,82 @@ export default function CompanyInternshipsPage() {
                       <div className="self-start sm:self-auto flex items-center gap-2">
                         <Link
                           href={`/company/applications?internshipId=${id}`}
-                          className="px-3 py-1.5 rounded-xl bg-teal-50 border border-teal-100 hover:bg-teal-100 text-[#2b8a78] text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
-                          title="View applicants for this role"
+                          className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
+                          title="View received student applications"
                         >
-                          <Users className="w-3.5 h-3.5" />
+                          <Users className="w-3.5 h-3.5 text-slate-500" />
                           <span>{internship.applicantsCount || 0} Applicants</span>
                         </Link>
                       </div>
                     </div>
 
-                    {/* Description preview */}
-                    {internship.description && (
-                      <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
-                        {internship.description}
-                      </p>
-                    )}
-
-                    {/* Skills & Action Buttons Footer */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-slate-100">
-                      {/* Skills tags */}
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-[11px] font-semibold text-slate-400 mr-1">
-                          Skills:
-                        </span>
-                        {(internship.skills || []).length > 0 ? (
-                          (internship.skills || []).slice(0, 5).map((skill) => (
-                            <span
-                              key={skill}
-                              className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-medium"
-                            >
-                              {skill}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-[10px] text-slate-400 italic">
-                            No skills specified
+                    {/* Skills tags */}
+                    {Array.isArray(internship.skills) && internship.skills.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        {internship.skills.slice(0, 6).map((skill, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-medium"
+                          >
+                            {skill}
                           </span>
-                        )}
-                        {(internship.skills || []).length > 5 && (
-                          <span className="text-[10px] text-slate-400">
-                            +{internship.skills.length - 5} more
+                        ))}
+                        {internship.skills.length > 6 && (
+                          <span className="text-[11px] text-slate-400 font-medium pl-1">
+                            +{internship.skills.length - 6} more
                           </span>
                         )}
                       </div>
+                    )}
 
-                      {/* Action buttons */}
-                      <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
-                        {/* View Posting */}
+                    {/* Card Actions Footer */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center gap-2">
+                        {/* View Action */}
                         <Link
                           href={`/internships/${id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
-                          title="View public posting"
+                          className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 inline-flex items-center gap-1.5 transition-colors"
                         >
-                          <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
-                          View
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>View Full Posting</span>
                         </Link>
 
-                        {/* Edit Posting */}
+                        {/* Edit Action */}
                         <button
                           onClick={() => handleOpenEdit(internship)}
-                          className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                          className="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold border border-slate-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                         >
                           <Edit3 className="w-3.5 h-3.5 text-slate-500" />
-                          Edit
+                          <span>Edit</span>
                         </button>
+                      </div>
 
-                        {/* Close / Reopen Posting */}
+                      <div className="flex items-center gap-2">
+                        {/* Close / Reopen Action */}
                         {isOpen ? (
                           <button
-                            onClick={() =>
-                              setConfirmModal({
-                                isOpen: true,
-                                type: "close",
-                                internship,
-                                processing: false,
-                              })
-                            }
-                            className="px-3 py-1.5 rounded-xl border border-rose-200 text-rose-700 hover:bg-rose-50 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                            onClick={() => handleOpenConfirm(internship, "close")}
+                            className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold border border-rose-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                           >
-                            <XCircle className="w-3.5 h-3.5" />
-                            Close Posting
+                            <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Close Posting</span>
                           </button>
                         ) : (
                           <button
-                            onClick={() =>
-                              setConfirmModal({
-                                isOpen: true,
-                                type: "reopen",
-                                internship,
-                                processing: false,
-                              })
-                            }
-                            className="px-3 py-1.5 rounded-xl border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                            onClick={() => handleOpenConfirm(internship, "reopen")}
+                            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold border border-emerald-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                           >
-                            <RotateCcw className="w-3.5 h-3.5" />
-                            Reopen
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Reopen Posting</span>
                           </button>
                         )}
 
-                        {/* Delete Posting */}
+                        {/* Delete Action */}
                         <button
-                          onClick={() =>
-                            setConfirmModal({
-                              isOpen: true,
-                              type: "delete",
-                              internship,
-                              processing: false,
-                            })
-                          }
-                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
-                          title="Delete posting"
+                          onClick={() => handleOpenConfirm(internship, "delete")}
+                          className="p-1.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors cursor-pointer"
+                          title="Permanently Delete Posting"
+                          aria-label="Delete Posting"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -772,21 +998,21 @@ export default function CompanyInternshipsPage() {
               })}
             </div>
           )}
-        </div>
-      </main>
+        </main>
+      </div>
 
-      {/* Confirmation Step Modal */}
+      {/* Confirmation Modal */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-6 space-y-4 animate-scale-up">
-            <div className="flex items-start gap-3">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-6 space-y-4 animate-scale-in">
+            <div className="flex items-start gap-3.5">
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                   confirmModal.type === "close"
-                    ? "bg-rose-50 text-rose-600"
+                    ? "bg-rose-50 text-rose-600 border border-rose-100"
                     : confirmModal.type === "delete"
-                    ? "bg-red-50 text-red-600"
-                    : "bg-emerald-50 text-emerald-600"
+                    ? "bg-red-50 text-red-600 border border-red-100"
+                    : "bg-emerald-50 text-emerald-600 border border-emerald-100"
                 }`}
               >
                 {confirmModal.type === "close" ? (
@@ -794,7 +1020,7 @@ export default function CompanyInternshipsPage() {
                 ) : confirmModal.type === "delete" ? (
                   <Trash2 className="w-5 h-5" />
                 ) : (
-                  <RotateCcw className="w-5 h-5" />
+                  <CheckCircle2 className="w-5 h-5" />
                 )}
               </div>
               <div className="space-y-1">
@@ -863,7 +1089,7 @@ export default function CompanyInternshipsPage() {
       {/* Edit Internship Modal */}
       {editModal.isOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full p-6 space-y-5 my-8">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full p-6 space-y-5 my-8">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-5 h-5 text-[#4B9C93]" />
@@ -873,7 +1099,7 @@ export default function CompanyInternshipsPage() {
               </div>
               <button
                 onClick={() => setEditModal((prev) => ({ ...prev, isOpen: false }))}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -956,6 +1182,11 @@ export default function CompanyInternshipsPage() {
                       className="mt-1.5 w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
                     />
                   )}
+                  {editModal.errors?.department && (
+                    <p className="text-[11px] text-rose-600 mt-1">
+                      {editModal.errors.department}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1004,20 +1235,31 @@ export default function CompanyInternshipsPage() {
                       className="mt-1.5 w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
                     />
                   )}
+                  {editModal.errors?.track && (
+                    <p className="text-[11px] text-rose-600 mt-1">
+                      {editModal.errors.track}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {/* Mode & Location */}
+              {/* Work Mode & Conditional Location */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Work Mode
+                    Work Mode *
                   </label>
                   <select
                     value={editModal.mode}
-                    onChange={(e) =>
-                      setEditModal((prev) => ({ ...prev, mode: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      const newMode = e.target.value;
+                      setEditModal((prev) => ({
+                        ...prev,
+                        mode: newMode,
+                        location: newMode === "remote" ? "" : prev.location,
+                        errors: { ...prev.errors, location: "" },
+                      }));
+                    }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
                   >
                     <option value="remote">Remote</option>
@@ -1028,57 +1270,228 @@ export default function CompanyInternshipsPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Location
+                    Location {editModal.mode === "remote" ? "(Not applicable)" : "*"}
                   </label>
-                  <input
-                    type="text"
-                    value={editModal.location}
-                    onChange={(e) =>
-                      setEditModal((prev) => ({ ...prev, location: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
-                    placeholder="e.g. Bengaluru, India or Remote"
-                  />
+                  {editModal.mode === "remote" ? (
+                    <div className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-400 italic">
+                      Location disabled for Remote positions
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={editModal.location}
+                      onChange={(e) =>
+                        setEditModal((prev) => ({ ...prev, location: e.target.value }))
+                      }
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                      placeholder="e.g. Bengaluru, India"
+                    />
+                  )}
+                  {editModal.errors?.location && (
+                    <p className="text-[11px] text-rose-600 mt-1">
+                      {editModal.errors.location}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {/* Stipend & Duration */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Stipend
-                  </label>
-                  <input
-                    type="text"
-                    value={editModal.stipend}
+              {/* Duration: Presets or Custom */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Duration *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <select
+                    value={editModal.durationChoice}
                     onChange={(e) =>
-                      setEditModal((prev) => ({ ...prev, stipend: e.target.value }))
+                      setEditModal((prev) => ({
+                        ...prev,
+                        durationChoice: e.target.value,
+                        errors: { ...prev.errors, duration: "" },
+                      }))
                     }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
-                    placeholder="e.g. ₹25,000 / month"
-                  />
+                  >
+                    <option value="">Select duration...</option>
+                    {PRESET_DURATIONS.map((dur) => (
+                      <option key={dur} value={dur}>
+                        {dur}
+                      </option>
+                    ))}
+                    <option value="custom">+ Custom Duration</option>
+                  </select>
+
+                  {editModal.durationChoice === "custom" && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Value (e.g. 10)"
+                        value={editModal.customDurationValue}
+                        onChange={(e) =>
+                          setEditModal((prev) => ({
+                            ...prev,
+                            customDurationValue: e.target.value,
+                            errors: { ...prev.errors, duration: "" },
+                          }))
+                        }
+                        className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                      />
+                      <select
+                        value={editModal.customDurationUnit}
+                        onChange={(e) =>
+                          setEditModal((prev) => ({
+                            ...prev,
+                            customDurationUnit: e.target.value,
+                          }))
+                        }
+                        className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                      >
+                        <option value="Weeks">Weeks</option>
+                        <option value="Months">Months</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+                {editModal.errors?.duration && (
+                  <p className="text-[11px] text-rose-600 mt-1">
+                    {editModal.errors.duration}
+                  </p>
+                )}
+              </div>
+
+              {/* Compensation Choices */}
+              <div className="space-y-2 p-3 bg-slate-50/80 rounded-xl border border-slate-200">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Compensation Model *
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "paid", label: "Paid" },
+                    { id: "unpaid", label: "Unpaid" },
+                    { id: "flexible", label: "Flexible" },
+                  ].map((type) => (
+                    <button
+                      key={type.id}
+                      type="button"
+                      onClick={() =>
+                        setEditModal((prev) => ({
+                          ...prev,
+                          compensationType: type.id,
+                          errors: { ...prev.errors, stipend: "" },
+                        }))
+                      }
+                      className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer text-center ${
+                        editModal.compensationType === type.id
+                          ? "bg-[#4B9C93] text-white shadow-2xs"
+                          : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Duration
-                  </label>
-                  <input
-                    type="text"
-                    value={editModal.duration}
-                    onChange={(e) =>
-                      setEditModal((prev) => ({ ...prev, duration: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
-                    placeholder="e.g. 3 Months or 6 Months"
-                  />
-                </div>
+                {/* Paid: Required Min and Max */}
+                {editModal.compensationType === "paid" && (
+                  <div className="pt-2">
+                    <p className="text-[11px] text-slate-500 mb-1.5">
+                      Monthly Stipend Range (₹) *
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Min amount (e.g. 15000)"
+                          value={editModal.stipendMin}
+                          onChange={(e) =>
+                            setEditModal((prev) => ({
+                              ...prev,
+                              stipendMin: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Max amount (e.g. 25000)"
+                          value={editModal.stipendMax}
+                          onChange={(e) =>
+                            setEditModal((prev) => ({
+                              ...prev,
+                              stipendMax: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Unpaid notice */}
+                {editModal.compensationType === "unpaid" && (
+                  <p className="text-[11px] text-slate-500 italic pt-1">
+                    This internship is Unpaid. No monetary stipend amount will be saved.
+                  </p>
+                )}
+
+                {/* Flexible: Optional Range */}
+                {editModal.compensationType === "flexible" && (
+                  <div className="pt-2">
+                    <p className="text-[11px] text-slate-500 mb-1.5">
+                      Monthly Stipend Range (₹) — <em>Optional</em>
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Min (optional)"
+                          value={editModal.stipendMin}
+                          onChange={(e) =>
+                            setEditModal((prev) => ({
+                              ...prev,
+                              stipendMin: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Max (optional)"
+                          value={editModal.stipendMax}
+                          onChange={(e) =>
+                            setEditModal((prev) => ({
+                              ...prev,
+                              stipendMax: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {editModal.errors?.stipend && (
+                  <p className="text-[11px] text-rose-600 mt-1">
+                    {editModal.errors.stipend}
+                  </p>
+                )}
               </div>
 
               {/* Required Skills */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Required Skills (comma separated)
+                  Required Skills (comma separated) *
                 </label>
                 <input
                   type="text"
@@ -1089,6 +1502,69 @@ export default function CompanyInternshipsPage() {
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
                   placeholder="e.g. React, Next.js, TypeScript, Tailwind CSS"
                 />
+                {editModal.errors?.skills && (
+                  <p className="text-[11px] text-rose-600 mt-1">
+                    {editModal.errors.skills}
+                  </p>
+                )}
+              </div>
+
+              {/* Optional Poster Image Upload */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Poster Image (Optional)
+                </label>
+
+                {editModal.posterImage ? (
+                  <div className="relative w-full h-32 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 group">
+                    <img
+                      src={editModal.posterImage}
+                      alt="Poster Preview"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditModal((prev) => ({ ...prev, posterImage: "" }))
+                      }
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-900/70 hover:bg-slate-900 text-white text-xs cursor-pointer"
+                      title="Remove Poster"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-200 hover:border-[#4B9C93] rounded-xl bg-slate-50 cursor-pointer transition-colors">
+                    {editModal.posterUploading ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <div className="w-4 h-4 border-2 border-[#4B9C93]/20 border-t-[#4B9C93] rounded-full animate-spin" />
+                        <span>Uploading image...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5 text-slate-400 mb-1" />
+                        <span className="text-xs font-medium text-slate-600">
+                          Click to upload poster image
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">
+                          PNG, JPG, or WebP (max 5MB)
+                        </span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(e) => handleUploadFile(e, setEditModal)}
+                      className="hidden"
+                      disabled={editModal.posterUploading}
+                    />
+                  </label>
+                )}
+                {editModal.errors?.poster && (
+                  <p className="text-[11px] text-rose-600">
+                    {editModal.errors.poster}
+                  </p>
+                )}
               </div>
 
               {/* Description */}
@@ -1120,7 +1596,7 @@ export default function CompanyInternshipsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={editModal.saving}
+                  disabled={editModal.saving || editModal.posterUploading}
                   className="px-4 py-2 rounded-xl bg-[#4B9C93] hover:bg-[#3d867e] text-white text-xs font-semibold cursor-pointer transition-colors"
                 >
                   {editModal.saving ? "Saving..." : "Save Changes"}
@@ -1134,7 +1610,7 @@ export default function CompanyInternshipsPage() {
       {/* Create Internship Modal */}
       {createModal.isOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full p-6 space-y-5 my-8">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full p-6 space-y-5 my-8">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-[#4B9C93]" />
@@ -1144,7 +1620,7 @@ export default function CompanyInternshipsPage() {
               </div>
               <button
                 onClick={() => setCreateModal((prev) => ({ ...prev, isOpen: false }))}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1227,6 +1703,11 @@ export default function CompanyInternshipsPage() {
                       className="mt-1.5 w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
                     />
                   )}
+                  {createModal.errors?.department && (
+                    <p className="text-[11px] text-rose-600 mt-1">
+                      {createModal.errors.department}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1275,20 +1756,31 @@ export default function CompanyInternshipsPage() {
                       className="mt-1.5 w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
                     />
                   )}
+                  {createModal.errors?.track && (
+                    <p className="text-[11px] text-rose-600 mt-1">
+                      {createModal.errors.track}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {/* Mode & Location */}
+              {/* Work Mode & Conditional Location */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Work Mode
+                    Work Mode *
                   </label>
                   <select
                     value={createModal.mode}
-                    onChange={(e) =>
-                      setCreateModal((prev) => ({ ...prev, mode: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      const newMode = e.target.value;
+                      setCreateModal((prev) => ({
+                        ...prev,
+                        mode: newMode,
+                        location: newMode === "remote" ? "" : prev.location,
+                        errors: { ...prev.errors, location: "" },
+                      }));
+                    }}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
                   >
                     <option value="remote">Remote</option>
@@ -1299,66 +1791,231 @@ export default function CompanyInternshipsPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Location
+                    Location {createModal.mode === "remote" ? "(Not applicable)" : "*"}
                   </label>
-                  <input
-                    type="text"
-                    value={createModal.location}
-                    onChange={(e) =>
-                      setCreateModal((prev) => ({
-                        ...prev,
-                        location: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
-                    placeholder="e.g. Remote or Bengaluru"
-                  />
+                  {createModal.mode === "remote" ? (
+                    <div className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-400 italic">
+                      Location disabled for Remote positions
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={createModal.location}
+                      onChange={(e) =>
+                        setCreateModal((prev) => ({
+                          ...prev,
+                          location: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                      placeholder="e.g. Bengaluru, India"
+                    />
+                  )}
+                  {createModal.errors?.location && (
+                    <p className="text-[11px] text-rose-600 mt-1">
+                      {createModal.errors.location}
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {/* Stipend & Duration */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Stipend
-                  </label>
-                  <input
-                    type="text"
-                    value={createModal.stipend}
+              {/* Duration: Presets or Custom */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Duration *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <select
+                    value={createModal.durationChoice}
                     onChange={(e) =>
                       setCreateModal((prev) => ({
                         ...prev,
-                        stipend: e.target.value,
+                        durationChoice: e.target.value,
+                        errors: { ...prev.errors, duration: "" },
                       }))
                     }
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
-                    placeholder="e.g. ₹25,000 / month"
-                  />
+                  >
+                    <option value="">Select duration...</option>
+                    {PRESET_DURATIONS.map((dur) => (
+                      <option key={dur} value={dur}>
+                        {dur}
+                      </option>
+                    ))}
+                    <option value="custom">+ Custom Duration</option>
+                  </select>
+
+                  {createModal.durationChoice === "custom" && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Value (e.g. 10)"
+                        value={createModal.customDurationValue}
+                        onChange={(e) =>
+                          setCreateModal((prev) => ({
+                            ...prev,
+                            customDurationValue: e.target.value,
+                            errors: { ...prev.errors, duration: "" },
+                          }))
+                        }
+                        className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                      />
+                      <select
+                        value={createModal.customDurationUnit}
+                        onChange={(e) =>
+                          setCreateModal((prev) => ({
+                            ...prev,
+                            customDurationUnit: e.target.value,
+                          }))
+                        }
+                        className="w-1/2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                      >
+                        <option value="Weeks">Weeks</option>
+                        <option value="Months">Months</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+                {createModal.errors?.duration && (
+                  <p className="text-[11px] text-rose-600 mt-1">
+                    {createModal.errors.duration}
+                  </p>
+                )}
+              </div>
+
+              {/* Compensation Choices */}
+              <div className="space-y-2 p-3 bg-slate-50/80 rounded-xl border border-slate-200">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Compensation Model *
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "paid", label: "Paid" },
+                    { id: "unpaid", label: "Unpaid" },
+                    { id: "flexible", label: "Flexible" },
+                  ].map((type) => (
+                    <button
+                      key={type.id}
+                      type="button"
+                      onClick={() =>
+                        setCreateModal((prev) => ({
+                          ...prev,
+                          compensationType: type.id,
+                          errors: { ...prev.errors, stipend: "" },
+                        }))
+                      }
+                      className={`py-2 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer text-center ${
+                        createModal.compensationType === type.id
+                          ? "bg-[#4B9C93] text-white shadow-2xs"
+                          : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      {type.label}
+                    </button>
+                  ))}
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Duration
-                  </label>
-                  <input
-                    type="text"
-                    value={createModal.duration}
-                    onChange={(e) =>
-                      setCreateModal((prev) => ({
-                        ...prev,
-                        duration: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
-                    placeholder="e.g. 3 Months"
-                  />
-                </div>
+                {/* Paid: Required Min and Max */}
+                {createModal.compensationType === "paid" && (
+                  <div className="pt-2">
+                    <p className="text-[11px] text-slate-500 mb-1.5">
+                      Monthly Stipend Range (₹) *
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Min amount (e.g. 15000)"
+                          value={createModal.stipendMin}
+                          onChange={(e) =>
+                            setCreateModal((prev) => ({
+                              ...prev,
+                              stipendMin: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Max amount (e.g. 25000)"
+                          value={createModal.stipendMax}
+                          onChange={(e) =>
+                            setCreateModal((prev) => ({
+                              ...prev,
+                              stipendMax: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Unpaid notice */}
+                {createModal.compensationType === "unpaid" && (
+                  <p className="text-[11px] text-slate-500 italic pt-1">
+                    This internship is Unpaid. No monetary stipend amount will be saved.
+                  </p>
+                )}
+
+                {/* Flexible: Optional Range */}
+                {createModal.compensationType === "flexible" && (
+                  <div className="pt-2">
+                    <p className="text-[11px] text-slate-500 mb-1.5">
+                      Monthly Stipend Range (₹) — <em>Optional</em>
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Min (optional)"
+                          value={createModal.stipendMin}
+                          onChange={(e) =>
+                            setCreateModal((prev) => ({
+                              ...prev,
+                              stipendMin: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="Max (optional)"
+                          value={createModal.stipendMax}
+                          onChange={(e) =>
+                            setCreateModal((prev) => ({
+                              ...prev,
+                              stipendMax: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {createModal.errors?.stipend && (
+                  <p className="text-[11px] text-rose-600 mt-1">
+                    {createModal.errors.stipend}
+                  </p>
+                )}
               </div>
 
               {/* Required Skills */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Required Skills (comma separated)
+                  Required Skills (comma separated) *
                 </label>
                 <input
                   type="text"
@@ -1369,6 +2026,69 @@ export default function CompanyInternshipsPage() {
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4B9C93]"
                   placeholder="e.g. React, Node.js, TypeScript"
                 />
+                {createModal.errors?.skills && (
+                  <p className="text-[11px] text-rose-600 mt-1">
+                    {createModal.errors.skills}
+                  </p>
+                )}
+              </div>
+
+              {/* Optional Poster Image Upload */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Poster Image (Optional)
+                </label>
+
+                {createModal.posterImage ? (
+                  <div className="relative w-full h-32 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 group">
+                    <img
+                      src={createModal.posterImage}
+                      alt="Poster Preview"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCreateModal((prev) => ({ ...prev, posterImage: "" }))
+                      }
+                      className="absolute top-2 right-2 p-1.5 rounded-lg bg-slate-900/70 hover:bg-slate-900 text-white text-xs cursor-pointer"
+                      title="Remove Poster"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-200 hover:border-[#4B9C93] rounded-xl bg-slate-50 cursor-pointer transition-colors">
+                    {createModal.posterUploading ? (
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <div className="w-4 h-4 border-2 border-[#4B9C93]/20 border-t-[#4B9C93] rounded-full animate-spin" />
+                        <span>Uploading image...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5 text-slate-400 mb-1" />
+                        <span className="text-xs font-medium text-slate-600">
+                          Click to upload poster image
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-0.5">
+                          PNG, JPG, or WebP (max 5MB)
+                        </span>
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(e) => handleUploadFile(e, setCreateModal)}
+                      className="hidden"
+                      disabled={createModal.posterUploading}
+                    />
+                  </label>
+                )}
+                {createModal.errors?.poster && (
+                  <p className="text-[11px] text-rose-600">
+                    {createModal.errors.poster}
+                  </p>
+                )}
               </div>
 
               {/* Description */}
@@ -1402,7 +2122,7 @@ export default function CompanyInternshipsPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={createModal.saving}
+                  disabled={createModal.saving || createModal.posterUploading}
                   className="px-4 py-2 rounded-xl bg-[#4B9C93] hover:bg-[#3d867e] text-white text-xs font-semibold cursor-pointer transition-colors"
                 >
                   {createModal.saving ? "Publishing..." : "Publish Opening"}

@@ -31,45 +31,45 @@ const API_URL =
 
 // Format stipend range or single amount
 function formatStipend(item) {
+  if (!item) return "Unpaid";
+  if (
+    item.compensationType === "unpaid" ||
+    item.stipend === "Unpaid" ||
+    item.stipendText === "Unpaid"
+  ) {
+    return "Unpaid";
+  }
+
   const min = item.stipendMin;
   const max = item.stipendMax;
 
-  if (min != null && max != null) {
+  if (min != null && max != null && (min > 0 || max > 0)) {
     return `₹${Number(min).toLocaleString("en-IN")} - ₹${Number(
       max
     ).toLocaleString("en-IN")}`;
-  } else if (min != null) {
-    return `₹${Number(min).toLocaleString("en-IN")}`;
-  } else if (max != null) {
-    return `₹${Number(max).toLocaleString("en-IN")}`;
   }
-  return "Not specified";
+  if (item.stipendText) return item.stipendText;
+  if (item.stipend) return item.stipend;
+  if (min != null && min > 0) {
+    return `₹${Number(min).toLocaleString("en-IN")}`;
+  }
+  if (item.compensationType === "flexible") return "Flexible";
+  return "Unpaid";
 }
 
 // Convert backend internship fields into the card format.
 function mapInternship(item) {
-  const min = item.stipendMin;
-  const max = item.stipendMax;
-
-  let stipend = "Not specified";
-
-  if (min != null && max != null) {
-    stipend = `${Number(min).toLocaleString("en-IN")} - ${Number(
-      max
-    ).toLocaleString("en-IN")}`;
-  } else if (min != null) {
-    stipend = Number(min).toLocaleString("en-IN");
-  } else if (max != null) {
-    stipend = Number(max).toLocaleString("en-IN");
-  }
+  const stipend = formatStipend(item);
 
   return {
     id: item._id,
     companyName: item.company || "Unknown Company",
+    companyLogo: item.companyLogo || "",
+    posterImage: item.posterImage || "",
     companyLogoText: item.company?.toUpperCase() || "COMPANY",
     companyLogoSubText: "",
     roleTitle: item.role || "Internship",
-    location: item.location || "Location not specified",
+    location: item.location || (item.mode === "remote" ? "Remote" : "Location not specified"),
     mode: item.mode || "onsite",
     stipend,
     duration: item.duration || "Not specified",

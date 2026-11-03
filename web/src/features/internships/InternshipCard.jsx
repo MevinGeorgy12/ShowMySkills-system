@@ -203,10 +203,16 @@ export default function InternshipCard({
         </motion.div>
       )}
 
-      {/* Company logo / image area (fills remaining balance space) */}
+      {/* Company logo / poster image area (fills remaining balance space) */}
       <div className="relative px-5 sm:px-6 pt-3.5 pb-2 flex-1 min-h-[80px] flex flex-col">
-        <div className="w-full h-full rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 flex flex-col items-center justify-center gap-1 overflow-hidden">
-          {internship.companyLogo ? (
+        <div className="w-full h-full rounded-xl border border-gray-100 bg-gray-50/50 flex flex-col items-center justify-center gap-1 overflow-hidden">
+          {internship.posterImage ? (
+            <img
+              src={internship.posterImage}
+              alt={roleTitle || companyName}
+              className="w-full h-full object-cover"
+            />
+          ) : internship.companyLogo ? (
             <img
               src={internship.companyLogo}
               alt={companyName}
