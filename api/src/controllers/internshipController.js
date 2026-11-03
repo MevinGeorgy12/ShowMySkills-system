@@ -50,6 +50,21 @@ export const createNewInternship = async (req, res, next) => {
 
 export const updateExistingInternship = async (req, res, next) => {
   try {
+    const existing = await getInternshipById(req.params.id);
+
+    // Company-level authorization: companies can only manage their own postings
+    if (req.user && req.user.role === 'company') {
+      const isOwner =
+        existing.postedBy && existing.postedBy.toString() === req.user.id.toString();
+
+      if (!isOwner) {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden: You can only manage your own internship postings',
+        });
+      }
+    }
+
     const updated = await updateInternship(req.params.id, req.body);
 
     return res.status(200).json({
@@ -64,6 +79,21 @@ export const updateExistingInternship = async (req, res, next) => {
 
 export const removeInternship = async (req, res, next) => {
   try {
+    const existing = await getInternshipById(req.params.id);
+
+    // Company-level authorization: companies can only delete their own postings
+    if (req.user && req.user.role === 'company') {
+      const isOwner =
+        existing.postedBy && existing.postedBy.toString() === req.user.id.toString();
+
+      if (!isOwner) {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden: You can only delete your own internship postings',
+        });
+      }
+    }
+
     await deleteInternship(req.params.id);
 
     return res.status(200).json({

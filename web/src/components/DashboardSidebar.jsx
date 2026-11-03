@@ -58,6 +58,7 @@ export default function DashboardSidebar() {
   } else if (role === "company") {
     topNavItems = [
       { label: "Dashboard", href: "/company/dashboard", icon: LayoutDashboard },
+      { label: "Manage Internships", href: "/company/internships", icon: Briefcase },
       { label: "Applications", href: "/company/applications", icon: FileText },
       { label: "People", href: "/company/people", icon: Users },
       { label: "Chats", href: "/company/chats", icon: MessageSquare },
