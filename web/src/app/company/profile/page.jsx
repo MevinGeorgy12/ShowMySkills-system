@@ -242,26 +242,66 @@ export default function CompanyProfilePage() {
           {/* Banner Header Card */}
           <div className="relative rounded-3xl overflow-hidden bg-white border border-gray-100 shadow-sm">
             {/* Gradient Top Banner */}
-            <div className="h-44 sm:h-52 bg-gradient-to-r from-[#4B9C93] via-[#3d867e] to-[#255e57] relative p-6 flex items-start justify-between">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-semibold">
-                <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
-                <span>Verified Enterprise Partner</span>
+            <div className="min-h-[12rem] sm:min-h-[13.5rem] bg-gradient-to-br from-[#4B9C93] via-[#3d867e] to-[#255e57] relative p-6 flex flex-col justify-between overflow-hidden">
+              {/* Subtle decorative shapes */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/5 blur-2xl" />
+                <div className="absolute bottom-0 right-1/4 w-80 h-80 rounded-full bg-teal-200/5 blur-3xl" />
+                <svg
+                  className="absolute inset-0 w-full h-full opacity-[0.06]"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <defs>
+                    <pattern id="banner-dots" width="28" height="28" patternUnits="userSpaceOnUse">
+                      <circle cx="2" cy="2" r="1.5" fill="#FFFFFF" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#banner-dots)" />
+                </svg>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleToggleEdit}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-gray-800 text-xs sm:text-sm font-semibold shadow-sm hover:bg-gray-50 transition-all cursor-pointer"
-                >
-                  <Edit3 className="w-4 h-4 text-[#4B9C93]" />
-                  <span>{isEditing ? "Cancel Editing" : "Edit Profile"}</span>
-                </button>
+              {/* Banner Top Row */}
+              <div className="relative z-10 flex items-center justify-between gap-3">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-semibold border border-white/20">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Verified Enterprise Partner</span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleToggleEdit}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-gray-800 text-xs sm:text-sm font-semibold shadow-sm hover:bg-gray-50 transition-all cursor-pointer"
+                  >
+                    <Edit3 className="w-4 h-4 text-[#4B9C93]" />
+                    <span>{isEditing ? "Cancel Editing" : "Edit Profile"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Company Name & Tagline inside Green Banner */}
+              <div className="relative z-10 pt-4 pb-14 sm:pb-2 sm:pl-[148px] text-center sm:text-left space-y-1">
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight">
+                    {company.name}
+                  </h1>
+                  {company.verified && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-white text-xs font-bold border border-white/30">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
+                      Verified
+                    </span>
+                  )}
+                </div>
+                {company.tagline && (
+                  <p className="text-xs sm:text-sm text-teal-50/90 max-w-2xl font-medium leading-relaxed">
+                    {company.tagline}
+                  </p>
+                )}
               </div>
             </div>
 
             {/* Profile Bar */}
             <div className="px-6 pb-6 pt-0 relative flex flex-col sm:flex-row sm:items-end justify-between gap-6 -mt-16 sm:-mt-14">
-              <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 text-center sm:text-left">
+              <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 text-center sm:text-left flex-1 min-w-0">
                 {/* Logo Box */}
                 <div
                   className={`w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white p-2 shadow-lg border flex items-center justify-center shrink-0 relative transition-all ${
@@ -364,47 +404,36 @@ export default function CompanyProfilePage() {
                   )}
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-center sm:justify-start gap-2">
-                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-gray-900 tracking-tight">
-                      {company.name}
-                    </h1>
-                    {company.verified && (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        Verified
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600 max-w-2xl">{company.tagline}</p>
-                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs font-medium text-gray-500 pt-1">
-                    <span className="flex items-center gap-1">
+                {/* Company detail items in the white section */}
+                <div className="pt-2 sm:pt-0 pb-1">
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-5 gap-y-2 text-xs font-medium text-gray-500">
+                    <span className="flex items-center gap-1.5">
                       <MapPin className="w-3.5 h-3.5 text-[#4B9C93]" />
-                      {company.location}
+                      <span>{company.location}</span>
                     </span>
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1.5">
                       <Users className="w-3.5 h-3.5 text-[#4B9C93]" />
-                      {company.companySize}
+                      <span>{company.companySize}</span>
                     </span>
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-[#4B9C93]" />
-                      Est. {company.establishedYear}
+                      <span>Est. {company.establishedYear}</span>
                     </span>
                     <a
                       href={company.website}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex items-center gap-1 text-[#4B9C93] hover:underline"
+                      className="flex items-center gap-1.5 text-[#4B9C93] hover:underline"
                     >
                       <Globe className="w-3.5 h-3.5" />
-                      {company.website.replace("https://", "")}
+                      <span>{company.website.replace("https://", "")}</span>
                     </a>
                   </div>
                 </div>
               </div>
 
               {/* Quick Actions */}
-              <div className="flex items-center justify-center gap-3">
+              <div className="flex items-center justify-center gap-3 shrink-0">
                 <Link
                   href="/company/applications"
                   className="px-5 py-2.5 rounded-2xl bg-[#4B9C93] hover:bg-[#3d867e] text-white text-xs sm:text-sm font-bold shadow-sm transition-all"
