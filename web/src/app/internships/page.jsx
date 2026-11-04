@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Search,
@@ -25,67 +25,21 @@ import DashboardSidebar from "@/components/DashboardSidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import InternshipCard from "@/features/internships/InternshipCard";
 import { tokenStorage } from "@/services/apiClient";
+import {
+  formatStipend,
+  mapInternship,
+  shuffleInternships,
+  deduplicateInternships,
+  extractStudentStatusSets,
+  filterCycleInternships,
+  buildInternshipQueryParams,
+  determineEmptyReason,
+  fetchUserStatusSets,
+  removeSavedAndRejectInternship,
+} from "@/lib/internshipDeck";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-
-// Format stipend range or single amount
-function formatStipend(item) {
-  if (!item) return "Unpaid";
-  if (
-    item.compensationType === "unpaid" ||
-    item.stipend === "Unpaid" ||
-    item.stipendText === "Unpaid"
-  ) {
-    return "Unpaid";
-  }
-
-  const min = item.stipendMin;
-  const max = item.stipendMax;
-
-  if (min != null && max != null && (min > 0 || max > 0)) {
-    return `₹${Number(min).toLocaleString("en-IN")} - ₹${Number(
-      max
-    ).toLocaleString("en-IN")}`;
-  }
-  if (item.stipendText) return item.stipendText;
-  if (item.stipend) return item.stipend;
-  if (min != null && min > 0) {
-    return `₹${Number(min).toLocaleString("en-IN")}`;
-  }
-  if (item.compensationType === "flexible") return "Flexible";
-  return "Unpaid";
-}
-
-// Convert backend internship fields into the card format.
-function mapInternship(item) {
-  const stipend = formatStipend(item);
-
-  return {
-    id: item._id,
-    companyName: item.company || "Unknown Company",
-    companyLogo: item.companyLogo || "",
-    posterImage: item.posterImage || "",
-    companyLogoText: item.company?.toUpperCase() || "COMPANY",
-    companyLogoSubText: "",
-    roleTitle: item.role || "Internship",
-    location: item.location || (item.mode === "remote" ? "Remote" : "Location not specified"),
-    mode: item.mode || "onsite",
-    stipend,
-    duration: item.duration || "Not specified",
-    skills: Array.isArray(item.skills) ? item.skills : [],
-    isVerified: Boolean(item.isVerified),
-    jobType: item.employmentType || "Internship",
-    postedTime: item.createdAt
-      ? new Date(item.createdAt).toLocaleDateString("en-IN")
-      : "Recently posted",
-    description:
-      item.responsibilities || "No description available.",
-    applicationUrl: item.applicationUrl || "",
-    department: item.department || "",
-    track: item.track || "",
-  };
-}
 
 // Persist an internship action through the authenticated backend API.
 async function saveInternshipAction(internshipId, action) {
@@ -116,42 +70,6 @@ async function saveInternshipAction(internshipId, action) {
   return result.data;
 }
 
-// Read this user's previous actions so acted-on cards stay out of the deck
-// after a refresh. If no token is available, the public feed still loads.
-async function getActionedInternshipIds() {
-  const token = tokenStorage.getAccessToken();
-  if (!token) return new Set();
-
-  try {
-    const response = await fetch(`${API_URL}/internship-actions/my-actions`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!response.ok) return new Set();
-
-    const result = await response.json();
-    if (!result.success || !Array.isArray(result.data)) return new Set();
-
-    return new Set(
-      result.data
-        .filter(
-          (item) =>
-            item.decision === "accepted" ||
-            item.decision === "rejected" ||
-            item.saved === true
-        )
-        .map((item) => {
-          const internship = item.internship;
-          return typeof internship === "string" ? internship : internship?._id;
-        })
-        .filter(Boolean)
-    );
-  } catch (error) {
-    console.error("Unable to restore internship actions:", error);
-    return new Set();
-  }
-}
-
 const EMPTY_FILTERS = {
   mode: "",
   location: "",
@@ -162,6 +80,16 @@ const EMPTY_FILTERS = {
 export default function InternshipsPage() {
   const [cards, setCards] = useState([]);
   const [allInternships, setAllInternships] = useState([]);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+  });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
+  const [emptyDeckReason, setEmptyDeckReason] = useState(null);
 
   const [activeTab, setActiveTab] = useState("Internships");
   const [searchQuery, setSearchQuery] = useState("");
@@ -176,6 +104,13 @@ export default function InternshipsPage() {
 
   const [myActions, setMyActions] = useState([]);
   const [loadingActions, setLoadingActions] = useState(false);
+
+  // Reject confirmation dialog for currently saved internships
+  const [rejectConfirmCard, setRejectConfirmCard] = useState(null);
+  const [isRejectingSaved, setIsRejectingSaved] = useState(false);
+
+  // Track card IDs already presented in the current browsing cycle to prevent duplicates across pages
+  const seenIdsInCycleRef = useRef(new Set());
 
   // Fetch user's saved and accepted actions
   const fetchMyActions = useCallback(async () => {
@@ -204,36 +139,25 @@ export default function InternshipsPage() {
     }
   }, []);
 
-  // Fetch internships using the backend-supported query parameters.
-  const fetchInternships = useCallback(async (filterValues = {}) => {
+  // Fetch active internships starting from page 1, annotating saved/applied markers and optionally shuffling
+  const fetchInternships = useCallback(async (filterValues = {}, shouldShuffle = false) => {
     try {
       setLoading(true);
       setApiError("");
       setButtonSwipeDirection(null);
 
-      const params = new URLSearchParams();
+      const token = tokenStorage.getAccessToken();
+      const statusSets = await fetchUserStatusSets(API_URL, token);
 
-      if (filterValues.mode) {
-        params.set("mode", filterValues.mode);
-      }
+      const activeSearch = (filterValues.search !== undefined ? filterValues.search : searchQuery).trim();
 
-      if (filterValues.location?.trim()) {
-        params.set("location", filterValues.location.trim());
-      }
+      const queryString = buildInternshipQueryParams({
+        page: 1,
+        limit: 10,
+        filters: filterValues,
+        search: activeSearch,
+      });
 
-      if (filterValues.skill?.trim()) {
-        params.set("skill", filterValues.skill.trim());
-      }
-
-      if (filterValues.verified) {
-        params.set("verified", filterValues.verified);
-      }
-
-      if (filterValues.search?.trim()) {
-        params.set("search", filterValues.search.trim());
-      }
-
-      const queryString = params.toString();
       const url = `${API_URL}/internships${
         queryString ? `?${queryString}` : ""
       }`;
@@ -250,23 +174,51 @@ export default function InternshipsPage() {
         throw new Error("Invalid API response");
       }
 
+      const paginationData = data.pagination || {
+        page: 1,
+        limit: 10,
+        total: data.data.length,
+        totalPages: 1,
+        hasNextPage: false,
+      };
+
       const mapped = data.data
         .filter((item) => item._id)
-        .map(mapInternship);
+        .map((item) => mapInternship(item, statusSets));
 
-      const actionedIds = await getActionedInternshipIds();
+      const deckCards = shouldShuffle ? shuffleInternships(mapped) : mapped;
 
-      setAllInternships(mapped);
-      setCards(mapped.filter((item) => !actionedIds.has(item.id)));
+      // Reset seen IDs for the new browsing cycle
+      seenIdsInCycleRef.current = new Set(deckCards.map((c) => c.id));
+
+      setAllInternships(deckCards);
+      setCards(deckCards);
+      setPagination(paginationData);
+
+      const hasActiveFilters = Boolean(
+        activeSearch ||
+        filterValues.mode ||
+        filterValues.location?.trim() ||
+        filterValues.skill?.trim() ||
+        filterValues.verified
+      );
+
+      const reason = determineEmptyReason({
+        totalAvailable: paginationData.total != null ? paginationData.total : deckCards.length,
+        deckCount: deckCards.length,
+        hasFilters: hasActiveFilters,
+      });
+      setEmptyDeckReason(reason);
     } catch (error) {
       console.warn("Backend API unreachable:", error);
       setAllInternships([]);
       setCards([]);
       setApiError("Unable to load internships from database server.");
+      setEmptyDeckReason("error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [searchQuery]);
 
   useEffect(() => {
     fetchInternships();
@@ -280,6 +232,62 @@ export default function InternshipsPage() {
       }
     }
   }, [fetchInternships, fetchMyActions]);
+
+  // Load next batch when deck is running low
+  const loadMoreInternships = useCallback(async () => {
+    if (loadingMore || loading || !pagination.hasNextPage) return;
+
+    try {
+      setLoadingMore(true);
+      const nextPage = pagination.page + 1;
+      const token = tokenStorage.getAccessToken();
+      const statusSets = await fetchUserStatusSets(API_URL, token);
+
+      const queryString = buildInternshipQueryParams({
+        page: nextPage,
+        limit: pagination.limit || 10,
+        filters,
+        search: searchQuery,
+      });
+
+      const url = `${API_URL}/internships${queryString ? `?${queryString}` : ""}`;
+      const response = await fetch(url);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      if (!data.success || !Array.isArray(data.data)) return;
+
+      const nextPagination = data.pagination || {
+        page: nextPage,
+        limit: 10,
+        total: data.data.length,
+        totalPages: nextPage,
+        hasNextPage: false,
+      };
+
+      const mapped = data.data
+        .filter((item) => item._id)
+        .map((item) => mapInternship(item, statusSets));
+
+      const newlyEligible = filterCycleInternships(mapped, seenIdsInCycleRef.current);
+      const uniqueNewCards = deduplicateInternships(newlyEligible, seenIdsInCycleRef.current);
+
+      for (const card of uniqueNewCards) {
+        seenIdsInCycleRef.current.add(card.id);
+      }
+
+      if (uniqueNewCards.length > 0) {
+        setCards((prev) => [...prev, ...uniqueNewCards]);
+        setAllInternships((prev) => [...prev, ...uniqueNewCards]);
+      }
+
+      setPagination(nextPagination);
+    } catch (error) {
+      console.warn("Failed to load more internships:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [pagination, loadingMore, loading, filters, searchQuery]);
 
   // Local search keeps the displayed cards responsive while typing.
   const query = searchQuery.trim().toLowerCase();
@@ -342,7 +350,7 @@ export default function InternshipsPage() {
 
   // Persist card swipes before removing cards from the current deck.
   const handleCardSwipe = async (direction) => {
-    if (buttonSwipeDirection) return;
+    if (buttonSwipeDirection || rejectConfirmCard || isRejectingSaved) return;
 
     const activeCard = filteredCards[0];
     if (!activeCard) return;
@@ -355,18 +363,32 @@ export default function InternshipsPage() {
     const action = actionMap[direction];
     if (!action) return;
 
-    try {
-      await saveInternshipAction(activeCard.id, action);
+    // If student chooses Reject/Skip on an internship that is currently saved, show confirmation dialog
+    if (action === "rejected" && activeCard.isSaved) {
+      setRejectConfirmCard(activeCard);
+      return;
+    }
 
-      const messages = {
-        right: `Interested in ${activeCard.roleTitle}`,
-        left: `Skipped ${activeCard.roleTitle}`,
-        save: `Saved ${activeCard.roleTitle}`,
-      };
-      showToast(messages[direction]);
-      setCards((previousCards) =>
-        previousCards.filter((card) => card.id !== activeCard.id)
-      );
+    try {
+      if (action === "accepted" && activeCard.isApplied) {
+        showToast(`Already applied to ${activeCard.roleTitle}`);
+      } else {
+        await saveInternshipAction(activeCard.id, action);
+        const messages = {
+          right: `Interested in ${activeCard.roleTitle}`,
+          left: `Skipped ${activeCard.roleTitle}`,
+          save: `Saved ${activeCard.roleTitle}`,
+        };
+        showToast(messages[direction]);
+      }
+
+      setCards((previousCards) => {
+        const remaining = previousCards.filter((card) => card.id !== activeCard.id);
+        if (remaining.length <= 2 && pagination.hasNextPage && !loadingMore) {
+          loadMoreInternships();
+        }
+        return remaining;
+      });
       fetchMyActions();
     } catch (error) {
       showToast(error.message || "Unable to save internship action.");
@@ -379,7 +401,9 @@ export default function InternshipsPage() {
       loading ||
       apiError ||
       !filteredCards.length ||
-      buttonSwipeDirection
+      buttonSwipeDirection ||
+      rejectConfirmCard ||
+      isRejectingSaved
     ) {
       return;
     }
@@ -393,25 +417,75 @@ export default function InternshipsPage() {
     const action = actionMap[direction];
     if (!action) return;
 
+    // If student chooses Reject/Skip on an internship that is currently saved, show confirmation dialog
+    if (action === "rejected" && activeCard.isSaved) {
+      setRejectConfirmCard(activeCard);
+      return;
+    }
+
     setButtonSwipeDirection(direction);
 
     try {
-      await saveInternshipAction(activeCard.id, action);
+      if (action === "accepted" && activeCard.isApplied) {
+        showToast(`Already applied to ${activeCard.roleTitle}`);
+      } else {
+        await saveInternshipAction(activeCard.id, action);
+        const messages = {
+          right: `Interested in ${activeCard.roleTitle}`,
+          left: `Skipped ${activeCard.roleTitle}`,
+          save: `Saved ${activeCard.roleTitle}`,
+        };
+        showToast(messages[direction]);
+      }
 
-      const messages = {
-        right: `Interested in ${activeCard.roleTitle}`,
-        left: `Skipped ${activeCard.roleTitle}`,
-        save: `Saved ${activeCard.roleTitle}`,
-      };
-      showToast(messages[direction]);
-      setCards((previousCards) =>
-        previousCards.filter((card) => card.id !== activeCard.id)
-      );
+      setCards((previousCards) => {
+        const remaining = previousCards.filter((card) => card.id !== activeCard.id);
+        if (remaining.length <= 2 && pagination.hasNextPage && !loadingMore) {
+          loadMoreInternships();
+        }
+        return remaining;
+      });
       fetchMyActions();
     } catch (error) {
       showToast(error.message || "Unable to save internship action.");
     } finally {
       setButtonSwipeDirection(null);
+    }
+  };
+
+  // Dialog actions for rejecting a saved internship
+  const handleKeepSaved = () => {
+    setRejectConfirmCard(null);
+  };
+
+  const handleConfirmRemoveFromSavedAndReject = async () => {
+    if (!rejectConfirmCard || isRejectingSaved) return;
+    setIsRejectingSaved(true);
+
+    try {
+      await removeSavedAndRejectInternship(
+        rejectConfirmCard.id,
+        saveInternshipAction
+      );
+
+      showToast(`Removed from Saved and skipped ${rejectConfirmCard.roleTitle}`);
+
+      setCards((previousCards) => {
+        const remaining = previousCards.filter(
+          (card) => card.id !== rejectConfirmCard.id
+        );
+        if (remaining.length <= 2 && pagination.hasNextPage && !loadingMore) {
+          loadMoreInternships();
+        }
+        return remaining;
+      });
+
+      fetchMyActions();
+      setRejectConfirmCard(null);
+    } catch (error) {
+      showToast(error.message || "Unable to reject saved internship.");
+    } finally {
+      setIsRejectingSaved(false);
     }
   };
 
@@ -421,7 +495,7 @@ export default function InternshipsPage() {
       await saveInternshipAction(internshipId, "unsaved");
       showToast(`Removed "${roleTitle}" from saved`);
       await fetchMyActions();
-      await fetchInternships();
+      await fetchInternships(filters, false);
     } catch (error) {
       showToast(error.message || "Unable to unsave internship.");
     }
@@ -433,7 +507,7 @@ export default function InternshipsPage() {
       await saveInternshipAction(internshipId, "accepted");
       showToast(`Interested in "${roleTitle}"`);
       await fetchMyActions();
-      await fetchInternships();
+      await fetchInternships(filters, false);
     } catch (error) {
       showToast(error.message || "Unable to accept internship.");
     }
@@ -443,10 +517,13 @@ export default function InternshipsPage() {
   const handleApplyFilters = async () => {
     setShowFilters(false);
 
-    await fetchInternships({
-      ...filters,
-      search: searchQuery,
-    });
+    await fetchInternships(
+      {
+        ...filters,
+        search: searchQuery,
+      },
+      false
+    );
   };
 
   // Clear filters and reload the default listing.
@@ -455,20 +532,26 @@ export default function InternshipsPage() {
     setSearchQuery("");
     setShowFilters(false);
 
-    await fetchInternships();
+    await fetchInternships({ ...EMPTY_FILTERS, search: "" }, false);
   };
 
-  // Reload the current listing without filters.
+  // Reload the discovery deck starting from page 1, shuffling available eligible internships.
   const handleReloadDeck = async () => {
-    setSearchQuery("");
-    setFilters({ ...EMPTY_FILTERS });
-
-    await fetchInternships();
-    await fetchMyActions();
+    try {
+      setIsReloading(true);
+      await fetchInternships(filters, true);
+      await fetchMyActions();
+    } finally {
+      setIsReloading(false);
+    }
   };
 
   const actionsDisabled =
-    loading || Boolean(apiError) || filteredCards.length === 0;
+    loading ||
+    Boolean(apiError) ||
+    filteredCards.length === 0 ||
+    Boolean(rejectConfirmCard) ||
+    isRejectingSaved;
 
   return (
     <div className="h-screen bg-[#F7F9F9] flex overflow-hidden">
@@ -698,10 +781,10 @@ export default function InternshipsPage() {
             <div className="w-full flex flex-col items-center justify-start sm:justify-center my-auto py-2 shrink-0 min-h-0">
               {/* Internship Swipe Deck */}
               <div className="relative w-[360px] sm:w-[400px] md:w-[430px] lg:w-[450px] max-w-[92vw] h-[380px] sm:h-[410px] md:h-[430px] lg:h-[440px] max-h-[calc(100vh-270px)] mb-4 sm:mb-5 flex items-center justify-center shrink-0">
-                {loading ? (
+                {loading || loadingMore ? (
                   <div className="flex flex-col items-center gap-3 text-sm text-gray-500">
                     <div className="w-8 h-8 border-4 border-[#4B9C93]/20 border-t-[#4B9C93] rounded-full animate-spin" />
-                    Loading internships...
+                    {isReloading ? "Reloading internships..." : loadingMore ? "Loading more internships..." : "Loading internships..."}
                   </div>
                 ) : apiError ? (
                   <div className="w-full h-full bg-white rounded-2xl p-6 text-center shadow-lg flex flex-col items-center justify-center">
@@ -709,9 +792,10 @@ export default function InternshipsPage() {
 
                     <button
                       type="button"
-                      onClick={() => fetchInternships()}
-                      className="px-5 py-2 rounded-full bg-[#4B9C93] text-white text-xs sm:text-sm font-semibold hover:bg-[#3d867e]"
+                      onClick={() => handleReloadDeck()}
+                      className="px-5 py-2 rounded-full bg-[#4B9C93] text-white text-xs sm:text-sm font-semibold hover:bg-[#3d867e] flex items-center gap-2 cursor-pointer"
                     >
+                      <RotateCcw className="w-3.5 h-3.5" />
                       Try Again
                     </button>
                   </div>
@@ -741,12 +825,14 @@ export default function InternshipsPage() {
                     </div>
 
                     <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">
-                      {searchQuery ? "No matches found" : "All caught up! 🎉"}
+                      {emptyDeckReason === "no_filter_matches" || searchQuery
+                        ? "No matches found"
+                        : "All caught up! 🎉"}
                     </h3>
 
                     <p className="text-xs sm:text-sm text-gray-500 max-w-[320px] mb-4 leading-relaxed">
-                      {searchQuery
-                        ? "Try another company, role, or skill."
+                      {emptyDeckReason === "no_filter_matches" || searchQuery
+                        ? "No internships match your current search or filters. Try adjusting your filters or reload to check for opportunities."
                         : "No more new internships in the discovery deck. You can reload the list to review the opportunities again."}
                     </p>
 
@@ -754,10 +840,11 @@ export default function InternshipsPage() {
                       id="reload-deck-btn"
                       type="button"
                       onClick={handleReloadDeck}
-                      className="px-5 py-2 rounded-full bg-[#4B9C93] text-white text-xs sm:text-sm font-semibold hover:bg-[#3d867e] active:scale-95 shadow-md shadow-[#4B9C93]/25 transition-all duration-200 flex items-center gap-2 cursor-pointer"
+                      disabled={loading || isReloading}
+                      className="px-5 py-2 rounded-full bg-[#4B9C93] text-white text-xs sm:text-sm font-semibold hover:bg-[#3d867e] active:scale-95 shadow-md shadow-[#4B9C93]/25 transition-all duration-200 flex items-center gap-2 cursor-pointer disabled:opacity-50"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      Reload Internships
+                      <RotateCcw className={`w-3.5 h-3.5 ${isReloading ? "animate-spin" : ""}`} />
+                      {isReloading ? "Reloading..." : "Reload Internships"}
                     </button>
                   </motion.div>
                 )}
@@ -1169,6 +1256,74 @@ export default function InternshipsPage() {
             </div>
           )}
         </main>
+
+        {/* Confirmation dialog for rejecting a saved internship */}
+        <AnimatePresence>
+          {rejectConfirmCard && (
+            <div
+              id="reject-saved-dialog-backdrop"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !isRejectingSaved) {
+                  handleKeepSaved();
+                }
+              }}
+            >
+              <motion.div
+                id="reject-saved-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="reject-saved-title"
+                aria-describedby="reject-saved-message"
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100 flex flex-col gap-4"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                    <Bookmark className="w-5 h-5 fill-amber-500 text-amber-500" />
+                  </div>
+                  <div>
+                    <h3
+                      id="reject-saved-title"
+                      className="font-bold text-gray-900 text-base"
+                    >
+                      Remove from Saved?
+                    </h3>
+                    <p
+                      id="reject-saved-message"
+                      className="text-xs sm:text-sm text-gray-600 mt-1 leading-relaxed"
+                    >
+                      This internship is saved. Rejecting it will remove it from Saved. Continue?
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-gray-100">
+                  <button
+                    id="keep-saved-btn"
+                    type="button"
+                    disabled={isRejectingSaved}
+                    onClick={handleKeepSaved}
+                    className="px-4 py-2 text-xs sm:text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors cursor-pointer disabled:opacity-50 text-center"
+                  >
+                    Keep Saved
+                  </button>
+                  <button
+                    id="confirm-remove-saved-reject-btn"
+                    type="button"
+                    disabled={isRejectingSaved}
+                    onClick={handleConfirmRemoveFromSavedAndReject}
+                    className="px-4 py-2 text-xs sm:text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-full transition-colors shadow-sm shadow-red-200 cursor-pointer disabled:opacity-50 text-center"
+                  >
+                    {isRejectingSaved ? "Removing & Rejecting..." : "Remove from Saved & Reject"}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
