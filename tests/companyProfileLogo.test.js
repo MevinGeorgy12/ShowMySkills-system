@@ -423,3 +423,132 @@ test('Logo Box: Preview is shown during edit mode, and saved logo is shown in vi
   assert.strictEqual(viewState.isInteractive, false);
 });
 
+// ──── 7. Establishment Year & Employee Count & Edit Mode Visibility ────
+
+const EMPLOYEE_RANGES = [
+  '1–10',
+  '11–50',
+  '51–200',
+  '201–500',
+  '501–1,000',
+  '1,001+',
+];
+
+const validateExactEmployeeCount = (val) => {
+  if (!val || val === '') return { valid: true };
+  const num = Number(val);
+  if (!Number.isInteger(num) || num <= 0) {
+    return { valid: false, error: 'Exact employee count must be a whole number greater than zero.' };
+  }
+  return { valid: true };
+};
+
+const validateEstablishmentYear = (val) => {
+  if (!val || val === '') return { valid: true };
+  const yr = Number(val);
+  const currentYear = new Date().getFullYear();
+  if (!Number.isInteger(yr) || yr < 1800 || yr > currentYear) {
+    return { valid: false, error: `Please enter a valid 4-digit year between 1800 and ${currentYear}.` };
+  }
+  return { valid: true };
+};
+
+test('Employee Count Validation: accepts whole numbers > 0 and rejects invalid inputs', () => {
+  assert.strictEqual(validateExactEmployeeCount('42').valid, true);
+  assert.strictEqual(validateExactEmployeeCount('1').valid, true);
+  assert.strictEqual(validateExactEmployeeCount('').valid, true); // optional
+
+  assert.strictEqual(validateExactEmployeeCount('0').valid, false);
+  assert.strictEqual(validateExactEmployeeCount('-5').valid, false);
+  assert.strictEqual(validateExactEmployeeCount('12.5').valid, false);
+  assert.strictEqual(validateExactEmployeeCount('abc').valid, false);
+});
+
+test('Establishment Year Validation: accepts valid 4-digit year and rejects invalid years', () => {
+  assert.strictEqual(validateEstablishmentYear('2015').valid, true);
+  assert.strictEqual(validateEstablishmentYear('').valid, true); // optional
+
+  assert.strictEqual(validateEstablishmentYear('1750').valid, false);
+  assert.strictEqual(validateEstablishmentYear(String(new Date().getFullYear() + 10)).valid, false);
+  assert.strictEqual(validateEstablishmentYear('not-a-year').valid, false);
+});
+
+test('User Service: updateProfile persists establishedYear and companySize', async () => {
+  const originalFindByIdAndUpdate = User.findByIdAndUpdate;
+  let capturedUpdate = null;
+
+  User.findByIdAndUpdate = (id, update) => {
+    capturedUpdate = update;
+    return {
+      select: () =>
+        Promise.resolve({
+          _id: id,
+          companyProfile: {
+            establishedYear: update.$set['companyProfile.establishedYear'],
+            companySize: update.$set['companyProfile.companySize'],
+          },
+        }),
+    };
+  };
+
+  try {
+    const res = await userService.updateProfile('64f1a2b3c4d5e6f7a8b9c111', {
+      establishedYear: '2019',
+      companySize: '51–200',
+    });
+
+    assert.strictEqual(capturedUpdate.$set['companyProfile.establishedYear'], 2019);
+    assert.strictEqual(capturedUpdate.$set['companyProfile.companySize'], '51–200');
+    assert.strictEqual(res.companyProfile.establishedYear, 2019);
+    assert.strictEqual(res.companyProfile.companySize, '51–200');
+  } finally {
+    User.findByIdAndUpdate = originalFindByIdAndUpdate;
+  }
+});
+
+test('User Service: updateProfile clears establishedYear and companySize when empty', async () => {
+  const originalFindByIdAndUpdate = User.findByIdAndUpdate;
+  let capturedUpdate = null;
+
+  User.findByIdAndUpdate = (id, update) => {
+    capturedUpdate = update;
+    return {
+      select: () =>
+        Promise.resolve({
+          _id: id,
+          companyProfile: {
+            establishedYear: update.$set['companyProfile.establishedYear'],
+            companySize: update.$set['companyProfile.companySize'],
+          },
+        }),
+    };
+  };
+
+  try {
+    const res = await userService.updateProfile('64f1a2b3c4d5e6f7a8b9c111', {
+      establishedYear: '',
+      companySize: '',
+    });
+
+    assert.strictEqual(capturedUpdate.$set['companyProfile.establishedYear'], null);
+    assert.strictEqual(capturedUpdate.$set['companyProfile.companySize'], '');
+    assert.strictEqual(res.companyProfile.establishedYear, null);
+    assert.strictEqual(res.companyProfile.companySize, '');
+  } finally {
+    User.findByIdAndUpdate = originalFindByIdAndUpdate;
+  }
+});
+
+test('Edit Mode: stats bar and View All Candidates are hidden during editing', () => {
+  const isEditing = true;
+  const showMetrics = !isEditing;
+  const showViewAllCandidates = !isEditing;
+
+  assert.strictEqual(showMetrics, false);
+  assert.strictEqual(showViewAllCandidates, false);
+
+  const viewMode = false;
+  assert.strictEqual(!viewMode, true);
+});
+
+

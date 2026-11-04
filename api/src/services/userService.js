@@ -461,6 +461,15 @@ export const userService = {
       updateData.profileIcon = data.companyProfile.logo;
     }
 
+    const yearVal = data.establishedYear !== undefined ? data.establishedYear : data.establishmentYear;
+    if (yearVal !== undefined) {
+      updateData['companyProfile.establishedYear'] = yearVal ? Number(yearVal) : null;
+    }
+    const sizeVal = data.companySize !== undefined ? data.companySize : data.teamSize;
+    if (sizeVal !== undefined) {
+      updateData['companyProfile.companySize'] = sizeVal ? String(sizeVal).trim() : '';
+    }
+
     if (data.github && !updateData.githubUrl) updateData.githubUrl = data.github;
     if (data.linkedin && !updateData.linkedinUrl) updateData.linkedinUrl = data.linkedin;
     if (data.department && !updateData.branch) updateData.branch = data.department;

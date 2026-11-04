@@ -26,12 +26,33 @@ import DashboardSidebar from "@/components/DashboardSidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 import { authService, apiRequest, uploadService } from "@/services/apiClient";
 
+const EMPLOYEE_RANGES = [
+  "1–10",
+  "11–50",
+  "51–200",
+  "201–500",
+  "501–1,000",
+  "1,001+",
+];
+
+const normalizeRange = (val) => {
+  if (!val) return "";
+  const cleaned = String(val)
+    .replace(/ employees?/i, "")
+    .replace(/-/g, "–")
+    .trim();
+  const match = EMPLOYEE_RANGES.find(
+    (r) => r === cleaned || r.replace(/,/g, "") === cleaned.replace(/,/g, "")
+  );
+  return match || "";
+};
+
 const initialCompanyData = {
   name: "",
   tagline: "",
   logo: "",
   verified: false,
-  establishedYear: new Date().getFullYear(),
+  establishedYear: "",
   industry: "",
   companySize: "",
   location: "",
@@ -61,6 +82,8 @@ export default function CompanyProfilePage() {
     name: company.name,
     tagline: company.tagline,
     logo: company.logo,
+    establishedYear: company.establishedYear,
+    companySize: company.companySize,
     location: company.location,
     website: company.website,
     email: company.email,
@@ -72,6 +95,12 @@ export default function CompanyProfilePage() {
   const [logoError, setLogoError] = useState("");
   const [logoSuccess, setLogoSuccess] = useState("");
   const fileInputRef = useRef(null);
+
+  const [employeeCountType, setEmployeeCountType] = useState("range");
+  const [selectedRange, setSelectedRange] = useState("");
+  const [exactCount, setExactCount] = useState("");
+  const [companySizeError, setCompanySizeError] = useState("");
+  const [yearError, setYearError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -85,10 +114,27 @@ export default function CompanyProfilePage() {
         const website = user.companyProfile?.website || user.website || "";
         const about = user.companyProfile?.aboutCompany || user.bio || "";
         const phone = user.phone || "";
+        const establishedYear =
+          user.companyProfile?.establishedYear !== undefined &&
+          user.companyProfile.establishedYear !== null
+            ? String(user.companyProfile.establishedYear)
+            : "";
+        const companySize = user.companyProfile?.companySize || "";
         const verified =
           user.companyProfile?.isVerified !== undefined
             ? user.companyProfile.isVerified
             : false;
+
+        const matchedRange = normalizeRange(companySize);
+        if (matchedRange) {
+          setEmployeeCountType("range");
+          setSelectedRange(matchedRange);
+          setExactCount("");
+        } else if (companySize && /^\d+$/.test(companySize.replace(/ employees?/i, "").trim())) {
+          setEmployeeCountType("exact");
+          setSelectedRange("");
+          setExactCount(companySize.replace(/ employees?/i, "").trim());
+        }
 
         setCompany((prev) => ({
           ...prev,
@@ -101,6 +147,8 @@ export default function CompanyProfilePage() {
           website: website || prev.website,
           about: about || prev.about,
           phone: phone || prev.phone,
+          establishedYear: establishedYear,
+          companySize: companySize,
         }));
         setFormData((prev) => ({
           ...prev,
@@ -112,6 +160,8 @@ export default function CompanyProfilePage() {
           website: website || prev.website,
           about: about || prev.about,
           phone: phone || prev.phone,
+          establishedYear: establishedYear,
+          companySize: companySize,
         }));
       }
     });
@@ -120,22 +170,29 @@ export default function CompanyProfilePage() {
     };
   }, []);
 
+  const resetEmployeeCountInputs = (targetSize) => {
+    const sizeStr = targetSize || "";
+    const matched = normalizeRange(sizeStr);
+    if (matched) {
+      setEmployeeCountType("range");
+      setSelectedRange(matched);
+      setExactCount("");
+    } else if (sizeStr && /^\d+$/.test(sizeStr.replace(/ employees?/i, "").trim())) {
+      setEmployeeCountType("exact");
+      setSelectedRange("");
+      setExactCount(sizeStr.replace(/ employees?/i, "").trim());
+    } else {
+      setEmployeeCountType("range");
+      setSelectedRange("");
+      setExactCount("");
+    }
+  };
+
   const handleToggleEdit = () => {
     if (isEditing) {
-      setFormData({
-        name: company.name,
-        tagline: company.tagline,
-        logo: company.logo,
-        location: company.location,
-        website: company.website,
-        email: company.email,
-        phone: company.phone,
-        about: company.about,
-      });
-      setLogoError("");
-      setLogoSuccess("");
-      setIsEditing(false);
+      handleCancelEdit();
     } else {
+      resetEmployeeCountInputs(company.companySize);
       setFormData({
         name: company.name,
         tagline: company.tagline,
@@ -145,14 +202,19 @@ export default function CompanyProfilePage() {
         email: company.email,
         phone: company.phone,
         about: company.about,
+        establishedYear: company.establishedYear || "",
+        companySize: company.companySize || "",
       });
       setLogoError("");
       setLogoSuccess("");
+      setYearError("");
+      setCompanySizeError("");
       setIsEditing(true);
     }
   };
 
   const handleCancelEdit = () => {
+    resetEmployeeCountInputs(company.companySize);
     setFormData({
       name: company.name,
       tagline: company.tagline,
@@ -162,9 +224,13 @@ export default function CompanyProfilePage() {
       email: company.email,
       phone: company.phone,
       about: company.about,
+      establishedYear: company.establishedYear || "",
+      companySize: company.companySize || "",
     });
     setLogoError("");
     setLogoSuccess("");
+    setYearError("");
+    setCompanySizeError("");
     setIsEditing(false);
   };
 
@@ -216,14 +282,48 @@ export default function CompanyProfilePage() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+
+    // Validate Establishment Year (optional; if entered, must be valid 4-digit year)
+    if (formData.establishedYear) {
+      const yr = Number(formData.establishedYear);
+      const currentYear = new Date().getFullYear();
+      if (!Number.isInteger(yr) || yr < 1800 || yr > currentYear) {
+        setYearError(`Please enter a valid 4-digit year between 1800 and ${currentYear}.`);
+        return;
+      }
+    }
+
+    // Validate Exact employee count (optional; if entered, must be whole number > 0)
+    if (employeeCountType === "exact" && exactCount) {
+      const num = Number(exactCount);
+      if (!Number.isInteger(num) || num <= 0) {
+        setCompanySizeError("Exact employee count must be a whole number greater than zero.");
+        return;
+      }
+    }
+
+    // Determine final companySize value
+    let finalCompanySize = "";
+    if (employeeCountType === "range") {
+      finalCompanySize = selectedRange;
+    } else if (employeeCountType === "exact" && exactCount) {
+      finalCompanySize = String(Number(exactCount));
+    }
+
+    const payload = {
+      ...formData,
+      establishedYear: formData.establishedYear ? Number(formData.establishedYear) : null,
+      companySize: finalCompanySize,
+    };
+
     setCompany((prev) => ({
       ...prev,
-      ...formData,
+      ...payload,
     }));
     setIsEditing(false);
     setEditSuccess(true);
     try {
-      await apiRequest("/auth/me", "PUT", formData);
+      await apiRequest("/auth/me", "PUT", payload);
     } catch {}
     setTimeout(() => setEditSuccess(false), 3000);
   };
@@ -407,51 +507,69 @@ export default function CompanyProfilePage() {
                 {/* Company detail items in the white section */}
                 <div className="pt-2 sm:pt-0 pb-1">
                   <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-5 gap-y-2 text-xs font-medium text-gray-500">
-                    <span className="flex items-center gap-1.5">
-                      <MapPin className="w-3.5 h-3.5 text-[#4B9C93]" />
-                      <span>{company.location}</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-[#4B9C93]" />
-                      <span>{company.companySize}</span>
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-[#4B9C93]" />
-                      <span>Est. {company.establishedYear}</span>
-                    </span>
-                    <a
-                      href={company.website}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-1.5 text-[#4B9C93] hover:underline"
-                    >
-                      <Globe className="w-3.5 h-3.5" />
-                      <span>{company.website.replace("https://", "")}</span>
-                    </a>
+                    {company.location ? (
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="w-3.5 h-3.5 text-[#4B9C93]" />
+                        <span>{company.location}</span>
+                      </span>
+                    ) : null}
+                    {company.companySize ? (
+                      <span className="flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-[#4B9C93]" />
+                        <span>
+                          {company.companySize.toLowerCase().includes("employee")
+                            ? company.companySize
+                            : /^\d+$/.test(company.companySize.trim())
+                            ? `${company.companySize.trim()} employees`
+                            : `${company.companySize} employees`}
+                        </span>
+                      </span>
+                    ) : null}
+                    {company.establishedYear ? (
+                      <span className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-[#4B9C93]" />
+                        <span>Est. {company.establishedYear}</span>
+                      </span>
+                    ) : null}
+                    {company.website ? (
+                      <a
+                        href={company.website}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 text-[#4B9C93] hover:underline"
+                      >
+                        <Globe className="w-3.5 h-3.5" />
+                        <span>{company.website.replace("https://", "")}</span>
+                      </a>
+                    ) : null}
                   </div>
                 </div>
               </div>
 
               {/* Quick Actions */}
-              <div className="flex items-center justify-center gap-3 shrink-0">
-                <Link
-                  href="/company/applications"
-                  className="px-5 py-2.5 rounded-2xl bg-[#4B9C93] hover:bg-[#3d867e] text-white text-xs sm:text-sm font-bold shadow-sm transition-all"
-                >
-                  View All Candidates
-                </Link>
-              </div>
+              {!isEditing && (
+                <div className="flex items-center justify-center gap-3 shrink-0">
+                  <Link
+                    href="/company/applications"
+                    className="px-5 py-2.5 rounded-2xl bg-[#4B9C93] hover:bg-[#3d867e] text-white text-xs sm:text-sm font-bold shadow-sm transition-all"
+                  >
+                    View All Candidates
+                  </Link>
+                </div>
+              )}
             </div>
 
             {/* Quick Metrics Bar */}
-            <div className="border-t border-gray-100 bg-gray-50/70 grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 py-3.5 px-6">
-              {company.stats.map((st, i) => (
-                <div key={i} className="text-center py-1">
-                  <p className="text-base sm:text-lg font-extrabold text-gray-900">{st.value}</p>
-                  <p className="text-xs text-gray-500 font-medium">{st.label}</p>
-                </div>
-              ))}
-            </div>
+            {!isEditing && (
+              <div className="border-t border-gray-100 bg-gray-50/70 grid grid-cols-2 sm:grid-cols-4 divide-x divide-gray-100 py-3.5 px-6">
+                {company.stats.map((st, i) => (
+                  <div key={i} className="text-center py-1">
+                    <p className="text-base sm:text-lg font-extrabold text-gray-900">{st.value}</p>
+                    <p className="text-xs text-gray-500 font-medium">{st.label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {editSuccess && (
@@ -514,6 +632,26 @@ export default function CompanyProfilePage() {
                   />
                 </div>
                 <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-700">
+                    Establishment Year <span className="text-gray-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1800"
+                    max={new Date().getFullYear()}
+                    placeholder="e.g. 2018"
+                    value={formData.establishedYear || ""}
+                    onChange={(e) => {
+                      setYearError("");
+                      setFormData({ ...formData, establishedYear: e.target.value });
+                    }}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#4B9C93]"
+                  />
+                  {yearError && (
+                    <p className="text-xs text-rose-600 font-medium mt-1">{yearError}</p>
+                  )}
+                </div>
+                <div className="space-y-1">
                   <label className="text-xs font-semibold text-gray-700">Recruitment Email</label>
                   <input
                     type="email"
@@ -522,7 +660,7 @@ export default function CompanyProfilePage() {
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#4B9C93]"
                   />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 sm:col-span-2">
                   <label className="text-xs font-semibold text-gray-700">Contact Phone</label>
                   <input
                     type="text"
@@ -530,6 +668,116 @@ export default function CompanyProfilePage() {
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#4B9C93]"
                   />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="text-xs font-semibold text-gray-700">
+                    Employee Count <span className="text-gray-400 font-normal">(Optional)</span>
+                  </label>
+
+                  <div className="flex flex-wrap items-center gap-5 text-xs font-medium text-gray-700">
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="employeeCountType"
+                        value="range"
+                        checked={employeeCountType === "range"}
+                        onChange={() => {
+                          setEmployeeCountType("range");
+                          setExactCount("");
+                          setCompanySizeError("");
+                          setFormData((prev) => ({ ...prev, companySize: selectedRange }));
+                        }}
+                        className="w-4 h-4 text-[#4B9C93] focus:ring-[#4B9C93] accent-[#4B9C93]"
+                      />
+                      <span>Choose a range</span>
+                    </label>
+
+                    <label className="inline-flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="employeeCountType"
+                        value="exact"
+                        checked={employeeCountType === "exact"}
+                        onChange={() => {
+                          setEmployeeCountType("exact");
+                          setSelectedRange("");
+                          setCompanySizeError("");
+                          setFormData((prev) => ({ ...prev, companySize: exactCount }));
+                        }}
+                        className="w-4 h-4 text-[#4B9C93] focus:ring-[#4B9C93] accent-[#4B9C93]"
+                      />
+                      <span>Enter exact count</span>
+                    </label>
+
+                    {(selectedRange || exactCount) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRange("");
+                          setExactCount("");
+                          setCompanySizeError("");
+                          setFormData((prev) => ({ ...prev, companySize: "" }));
+                        }}
+                        className="text-[11px] text-gray-500 hover:text-gray-800 underline cursor-pointer ml-auto"
+                      >
+                        Clear employee count
+                      </button>
+                    )}
+                  </div>
+
+                  {employeeCountType === "range" ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 pt-1">
+                      {EMPLOYEE_RANGES.map((range) => (
+                        <button
+                          key={range}
+                          type="button"
+                          onClick={() => {
+                            const nextVal = selectedRange === range ? "" : range;
+                            setSelectedRange(nextVal);
+                            setCompanySizeError("");
+                            setFormData((prev) => ({ ...prev, companySize: nextVal }));
+                          }}
+                          className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center ${
+                            selectedRange === range
+                              ? "bg-[#E6F7F3] border-[#4B9C93] text-[#0D9488] shadow-xs"
+                              : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          {range}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="pt-1">
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        placeholder="e.g. 42"
+                        value={exactCount}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setExactCount(val);
+                          if (val === "") {
+                            setCompanySizeError("");
+                            setFormData((prev) => ({ ...prev, companySize: "" }));
+                          } else {
+                            const num = Number(val);
+                            if (!Number.isInteger(num) || num <= 0) {
+                              setCompanySizeError("Exact employee count must be a whole number greater than zero.");
+                            } else {
+                              setCompanySizeError("");
+                              setFormData((prev) => ({ ...prev, companySize: String(num) }));
+                            }
+                          }
+                        }}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#4B9C93]"
+                      />
+                      {companySizeError && (
+                        <p className="text-xs text-rose-600 font-medium mt-1">{companySizeError}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1 sm:col-span-2">
                   <label className="text-xs font-semibold text-gray-700">About Company</label>
