@@ -88,6 +88,7 @@ export default function CompanyInternshipsPage() {
     type: null, // "close" | "reopen" | "delete"
     internship: null,
     processing: false,
+    deleteConfirmed: false,
   });
 
   // Edit Posting Modal State
@@ -219,11 +220,18 @@ export default function CompanyInternshipsPage() {
 
   // Action: Open Confirmation Modal
   const handleOpenConfirm = (internship, type) => {
+    // Prevent opening delete confirmation for an Open/Active posting
+    if (type === "delete" && internship?.status === "active") {
+      alert("Cannot delete an active internship posting. Please close the posting first.");
+      return;
+    }
+
     setConfirmModal({
       isOpen: true,
       type,
       internship,
       processing: false,
+      deleteConfirmed: false,
     });
   };
 
@@ -250,7 +258,13 @@ export default function CompanyInternshipsPage() {
           ? "Internship closed. Students can no longer apply."
           : "Internship reopened and active for student applications."
       );
-      setConfirmModal({ isOpen: false, type: null, internship: null, processing: false });
+      setConfirmModal({
+        isOpen: false,
+        type: null,
+        internship: null,
+        processing: false,
+        deleteConfirmed: false,
+      });
     } catch (err) {
       alert(err?.message || "Failed to update posting status");
       setConfirmModal((prev) => ({ ...prev, processing: false }));
@@ -259,8 +273,18 @@ export default function CompanyInternshipsPage() {
 
   // Action: Delete Posting
   const handleExecuteDelete = async () => {
-    const { internship } = confirmModal;
+    const { internship, deleteConfirmed } = confirmModal;
     if (!internship) return;
+
+    if (internship.status === "active") {
+      alert("Cannot delete an active internship posting. Please close the posting first.");
+      return;
+    }
+
+    if (!deleteConfirmed) {
+      alert("Please confirm that you understand candidate application details will be deleted.");
+      return;
+    }
 
     setConfirmModal((prev) => ({ ...prev, processing: true }));
     const id = internship._id || internship.id;
@@ -269,7 +293,13 @@ export default function CompanyInternshipsPage() {
       await internshipService.delete(id);
       setInternships((prev) => prev.filter((i) => (i._id || i.id) !== id));
       showToast("Internship posting permanently deleted.");
-      setConfirmModal({ isOpen: false, type: null, internship: null, processing: false });
+      setConfirmModal({
+        isOpen: false,
+        type: null,
+        internship: null,
+        processing: false,
+        deleteConfirmed: false,
+      });
     } catch (err) {
       alert(err?.message || "Failed to delete internship posting");
       setConfirmModal((prev) => ({ ...prev, processing: false }));
@@ -615,11 +645,11 @@ export default function CompanyInternshipsPage() {
     <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
       <DashboardSidebar />
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+      <div className="flex-1 md:ml-[220px] ml-0 flex flex-col min-w-0 overflow-y-auto">
         <DashboardHeader />
 
         <main className="flex-1 p-6 sm:p-8 max-w-7xl w-full mx-auto space-y-6">
-          {/* Header title & Post CTA */}
+          {/* Header title */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-50 border border-teal-200 text-[#2b8a78] text-[11px] font-semibold mb-1.5">
@@ -634,14 +664,6 @@ export default function CompanyInternshipsPage() {
                 Oversee your active listings, edit requirements, manage open/closed status, and monitor candidate inflow.
               </p>
             </div>
-
-            <button
-              onClick={() => setCreateModal((prev) => ({ ...prev, isOpen: true }))}
-              className="px-4 py-2.5 bg-[#4B9C93] hover:bg-[#3d867e] text-white text-xs font-semibold rounded-xl transition-colors shadow-2xs inline-flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-            >
-              <PlusCircle className="w-4 h-4" />
-              Post New Internship
-            </button>
           </div>
 
           {/* Toast Notification */}
@@ -708,6 +730,19 @@ export default function CompanyInternshipsPage() {
               </div>
             </div>
           )}
+
+          {/* Main Posting Action */}
+          <div className="flex items-center justify-end">
+            <button
+              id="company-new-posting-btn"
+              type="button"
+              onClick={() => setCreateModal((prev) => ({ ...prev, isOpen: true }))}
+              className="inline-flex items-center gap-2 bg-[#4B9C93] hover:bg-[#3d867e] text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-sm hover:shadow-md transition-all cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>New Posting</span>
+            </button>
+          </div>
 
           {/* Search & Status Filters */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-4">
@@ -966,6 +1001,7 @@ export default function CompanyInternshipsPage() {
                         {/* Close / Reopen Action */}
                         {isOpen ? (
                           <button
+                            id={`close-posting-btn-${id}`}
                             onClick={() => handleOpenConfirm(internship, "close")}
                             className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold border border-rose-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
                           >
@@ -973,24 +1009,28 @@ export default function CompanyInternshipsPage() {
                             <span>Close Posting</span>
                           </button>
                         ) : (
-                          <button
-                            onClick={() => handleOpenConfirm(internship, "reopen")}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold border border-emerald-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Reopen Posting</span>
-                          </button>
-                        )}
+                          <>
+                            <button
+                              id={`reopen-posting-btn-${id}`}
+                              onClick={() => handleOpenConfirm(internship, "reopen")}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold border border-emerald-200 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Reopen Posting</span>
+                            </button>
 
-                        {/* Delete Action */}
-                        <button
-                          onClick={() => handleOpenConfirm(internship, "delete")}
-                          className="p-1.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors cursor-pointer"
-                          title="Permanently Delete Posting"
-                          aria-label="Delete Posting"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                            {/* Delete Action — only available for closed postings */}
+                            <button
+                              id={`delete-posting-btn-${id}`}
+                              onClick={() => handleOpenConfirm(internship, "delete")}
+                              className="p-1.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 transition-colors cursor-pointer"
+                              title="Permanently Delete Posting"
+                              aria-label="Delete Posting"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1031,19 +1071,45 @@ export default function CompanyInternshipsPage() {
                     ? "Permanently Delete Posting?"
                     : "Reopen Internship Posting?"}
                 </h3>
-                <p className="text-xs text-slate-500 leading-relaxed">
+                <p id="confirm-modal-warning" className="text-xs text-slate-500 leading-relaxed">
                   {confirmModal.type === "close"
                     ? `Closing "${confirmModal.internship?.role}" means students will no longer be able to discover or submit applications for this role.`
                     : confirmModal.type === "delete"
-                    ? `Deleting "${confirmModal.internship?.role}" will remove it permanently. Existing student application records for this role may be affected.`
+                    ? "Deleting this post will permanently remove its details and the details of candidates who applied."
                     : `Reopening "${confirmModal.internship?.role}" will make it visible in student searches and accept new applications.`}
                 </p>
               </div>
             </div>
 
+            {/* Checkbox confirmation required specifically for permanent delete */}
+            {confirmModal.type === "delete" && (
+              <label
+                htmlFor="delete-confirm-checkbox"
+                className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-50/80 border border-amber-200 cursor-pointer text-xs text-amber-900 select-none hover:bg-amber-100/60 transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  id="delete-confirm-checkbox"
+                  required
+                  checked={confirmModal.deleteConfirmed || false}
+                  onChange={(e) =>
+                    setConfirmModal((prev) => ({
+                      ...prev,
+                      deleteConfirmed: e.target.checked,
+                    }))
+                  }
+                  className="mt-0.5 rounded border-amber-300 text-red-600 focus:ring-red-500 cursor-pointer shrink-0"
+                />
+                <span className="leading-snug">
+                  I understand that deleting this post will permanently remove its details and the details of candidates who applied.
+                </span>
+              </label>
+            )}
+
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
               <button
                 type="button"
+                id="confirm-modal-cancel-btn"
                 disabled={confirmModal.processing}
                 onClick={() =>
                   setConfirmModal({
@@ -1051,6 +1117,7 @@ export default function CompanyInternshipsPage() {
                     type: null,
                     internship: null,
                     processing: false,
+                    deleteConfirmed: false,
                   })
                 }
                 className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold cursor-pointer"
@@ -1059,13 +1126,21 @@ export default function CompanyInternshipsPage() {
               </button>
               <button
                 type="button"
-                disabled={confirmModal.processing}
+                id={confirmModal.type === "delete" ? "confirm-delete-btn" : "confirm-action-btn"}
+                disabled={
+                  confirmModal.processing ||
+                  (confirmModal.type === "delete" && !confirmModal.deleteConfirmed)
+                }
                 onClick={
                   confirmModal.type === "delete"
                     ? handleExecuteDelete
                     : handleExecuteStatusChange
                 }
-                className={`px-4 py-2 rounded-xl text-white text-xs font-semibold cursor-pointer transition-colors ${
+                className={`px-4 py-2 rounded-xl text-white text-xs font-semibold transition-colors ${
+                  confirmModal.type === "delete" && !confirmModal.deleteConfirmed
+                    ? "opacity-40 cursor-not-allowed bg-red-600"
+                    : "cursor-pointer"
+                } ${
                   confirmModal.type === "close"
                     ? "bg-rose-600 hover:bg-rose-700"
                     : confirmModal.type === "delete"

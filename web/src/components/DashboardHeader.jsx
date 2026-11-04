@@ -167,15 +167,6 @@ export default function DashboardHeader({
           </>
         ) : role === "company" ? (
           <>
-            <Link
-              href="/company/applications?new=true"
-              id="header-post-internship-btn"
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-[#4B9C93] hover:bg-[#3d867e] rounded-full px-4 py-1.5 shadow-xs transition-all cursor-pointer"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Post Internship</span>
-            </Link>
-
             {/* Notification Bell */}
             <div className="relative" ref={notifRef}>
               <button
