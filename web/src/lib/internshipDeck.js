@@ -53,6 +53,7 @@ export function mapInternship(
     stipend,
     duration: item.duration || "Not specified",
     skills: Array.isArray(item.skills) ? item.skills : [],
+    // Genuine company verification badge only: never derive or enable isVerified from accepted/interested action history
     isVerified: Boolean(item.isVerified),
     isSaved: savedIds instanceof Set ? savedIds.has(id) : Boolean(item.isSaved),
     isApplied: appliedIds instanceof Set ? appliedIds.has(id) : Boolean(item.isApplied),
@@ -253,4 +254,16 @@ export async function fetchUserStatusSets(apiUrl, token, customFetch = fetch) {
     console.warn("Unable to fetch user status sets:", error);
     return { savedIds: new Set(), acceptedIds: new Set(), appliedIds: new Set() };
   }
+}
+
+/**
+ * Un-saves an internship and marks it rejected, keeping both states in sync in the backend.
+ * Does not alter or delete unrelated action or application history.
+ */
+export async function removeSavedAndRejectInternship(internshipId, saveActionFn) {
+  if (!internshipId || typeof saveActionFn !== "function") return;
+  // 1. Remove saved state
+  await saveActionFn(internshipId, "unsaved");
+  // 2. Mark rejected
+  await saveActionFn(internshipId, "rejected");
 }

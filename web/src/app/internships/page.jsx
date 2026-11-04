@@ -35,6 +35,7 @@ import {
   buildInternshipQueryParams,
   determineEmptyReason,
   fetchUserStatusSets,
+  removeSavedAndRejectInternship,
 } from "@/lib/internshipDeck";
 
 const API_URL =
@@ -103,6 +104,10 @@ export default function InternshipsPage() {
 
   const [myActions, setMyActions] = useState([]);
   const [loadingActions, setLoadingActions] = useState(false);
+
+  // Reject confirmation dialog for currently saved internships
+  const [rejectConfirmCard, setRejectConfirmCard] = useState(null);
+  const [isRejectingSaved, setIsRejectingSaved] = useState(false);
 
   // Track card IDs already presented in the current browsing cycle to prevent duplicates across pages
   const seenIdsInCycleRef = useRef(new Set());
@@ -345,7 +350,7 @@ export default function InternshipsPage() {
 
   // Persist card swipes before removing cards from the current deck.
   const handleCardSwipe = async (direction) => {
-    if (buttonSwipeDirection) return;
+    if (buttonSwipeDirection || rejectConfirmCard || isRejectingSaved) return;
 
     const activeCard = filteredCards[0];
     if (!activeCard) return;
@@ -357,6 +362,12 @@ export default function InternshipsPage() {
     };
     const action = actionMap[direction];
     if (!action) return;
+
+    // If student chooses Reject/Skip on an internship that is currently saved, show confirmation dialog
+    if (action === "rejected" && activeCard.isSaved) {
+      setRejectConfirmCard(activeCard);
+      return;
+    }
 
     try {
       if (action === "accepted" && activeCard.isApplied) {
@@ -390,7 +401,9 @@ export default function InternshipsPage() {
       loading ||
       apiError ||
       !filteredCards.length ||
-      buttonSwipeDirection
+      buttonSwipeDirection ||
+      rejectConfirmCard ||
+      isRejectingSaved
     ) {
       return;
     }
@@ -403,6 +416,12 @@ export default function InternshipsPage() {
     };
     const action = actionMap[direction];
     if (!action) return;
+
+    // If student chooses Reject/Skip on an internship that is currently saved, show confirmation dialog
+    if (action === "rejected" && activeCard.isSaved) {
+      setRejectConfirmCard(activeCard);
+      return;
+    }
 
     setButtonSwipeDirection(direction);
 
@@ -431,6 +450,42 @@ export default function InternshipsPage() {
       showToast(error.message || "Unable to save internship action.");
     } finally {
       setButtonSwipeDirection(null);
+    }
+  };
+
+  // Dialog actions for rejecting a saved internship
+  const handleKeepSaved = () => {
+    setRejectConfirmCard(null);
+  };
+
+  const handleConfirmRemoveFromSavedAndReject = async () => {
+    if (!rejectConfirmCard || isRejectingSaved) return;
+    setIsRejectingSaved(true);
+
+    try {
+      await removeSavedAndRejectInternship(
+        rejectConfirmCard.id,
+        saveInternshipAction
+      );
+
+      showToast(`Removed from Saved and skipped ${rejectConfirmCard.roleTitle}`);
+
+      setCards((previousCards) => {
+        const remaining = previousCards.filter(
+          (card) => card.id !== rejectConfirmCard.id
+        );
+        if (remaining.length <= 2 && pagination.hasNextPage && !loadingMore) {
+          loadMoreInternships();
+        }
+        return remaining;
+      });
+
+      fetchMyActions();
+      setRejectConfirmCard(null);
+    } catch (error) {
+      showToast(error.message || "Unable to reject saved internship.");
+    } finally {
+      setIsRejectingSaved(false);
     }
   };
 
@@ -492,7 +547,11 @@ export default function InternshipsPage() {
   };
 
   const actionsDisabled =
-    loading || Boolean(apiError) || filteredCards.length === 0;
+    loading ||
+    Boolean(apiError) ||
+    filteredCards.length === 0 ||
+    Boolean(rejectConfirmCard) ||
+    isRejectingSaved;
 
   return (
     <div className="h-screen bg-[#F7F9F9] flex overflow-hidden">
@@ -1197,6 +1256,74 @@ export default function InternshipsPage() {
             </div>
           )}
         </main>
+
+        {/* Confirmation dialog for rejecting a saved internship */}
+        <AnimatePresence>
+          {rejectConfirmCard && (
+            <div
+              id="reject-saved-dialog-backdrop"
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !isRejectingSaved) {
+                  handleKeepSaved();
+                }
+              }}
+            >
+              <motion.div
+                id="reject-saved-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="reject-saved-title"
+                aria-describedby="reject-saved-message"
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100 flex flex-col gap-4"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                    <Bookmark className="w-5 h-5 fill-amber-500 text-amber-500" />
+                  </div>
+                  <div>
+                    <h3
+                      id="reject-saved-title"
+                      className="font-bold text-gray-900 text-base"
+                    >
+                      Remove from Saved?
+                    </h3>
+                    <p
+                      id="reject-saved-message"
+                      className="text-xs sm:text-sm text-gray-600 mt-1 leading-relaxed"
+                    >
+                      This internship is saved. Rejecting it will remove it from Saved. Continue?
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-gray-100">
+                  <button
+                    id="keep-saved-btn"
+                    type="button"
+                    disabled={isRejectingSaved}
+                    onClick={handleKeepSaved}
+                    className="px-4 py-2 text-xs sm:text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors cursor-pointer disabled:opacity-50 text-center"
+                  >
+                    Keep Saved
+                  </button>
+                  <button
+                    id="confirm-remove-saved-reject-btn"
+                    type="button"
+                    disabled={isRejectingSaved}
+                    onClick={handleConfirmRemoveFromSavedAndReject}
+                    className="px-4 py-2 text-xs sm:text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-full transition-colors shadow-sm shadow-red-200 cursor-pointer disabled:opacity-50 text-center"
+                  >
+                    {isRejectingSaved ? "Removing & Rejecting..." : "Remove from Saved & Reject"}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

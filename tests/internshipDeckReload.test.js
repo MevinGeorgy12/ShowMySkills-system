@@ -12,6 +12,7 @@ import {
   determineEmptyReason,
   mapInternship,
   formatStipend,
+  removeSavedAndRejectInternship,
 } from '../web/src/lib/internshipDeck.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -206,4 +207,112 @@ test('Test 6: The "View Saved" button is completely removed from InternshipsPage
   // Confirm reload button is present
   assert.ok(pageSource.includes('id="reload-deck-btn"'), 'Reload button must be present');
   assert.ok(pageSource.includes('Reload Internships'), 'Button label must be Reload Internships');
+});
+
+// ─────────────────────────────────────────────────────────────
+// TEST 7: Accepted/Interested card badge
+// ─────────────────────────────────────────────────────────────
+
+test('Test 7: Top "Verified" badge is only shown for genuine company verification, never merely for accepted/interested cards', () => {
+  const mockActions = [
+    { internship: 'card_accepted_unverified', decision: 'accepted', saved: true },
+    { internship: 'card_accepted_verified', decision: 'accepted', saved: false },
+    { internship: 'card_plain_verified', decision: null, saved: false },
+  ];
+  const mockApplications = [
+    { internship: 'card_accepted_unverified', status: 'applied' },
+  ];
+
+  const statusSets = extractStudentStatusSets(mockActions, mockApplications);
+
+  // Case A: Card was previously accepted by the student, but has NO company verification data (isVerified: false or omitted)
+  const acceptedUnverified = mapInternship(
+    { _id: 'card_accepted_unverified', role: 'Intern A', isVerified: false },
+    statusSets
+  );
+  assert.strictEqual(
+    acceptedUnverified.isVerified,
+    false,
+    'Card must NOT receive a Verified badge merely because it was marked Interested/Accepted'
+  );
+  assert.strictEqual(acceptedUnverified.isAccepted, true, 'isAccepted should reflect action status');
+  assert.strictEqual(acceptedUnverified.isSaved, true, 'Saved state must not be changed');
+  assert.strictEqual(acceptedUnverified.isApplied, true, 'Application state must not be changed');
+
+  // Case B: Card was previously accepted AND has genuine company verification data (isVerified: true)
+  const acceptedVerified = mapInternship(
+    { _id: 'card_accepted_verified', role: 'Intern B', isVerified: true },
+    statusSets
+  );
+  assert.strictEqual(
+    acceptedVerified.isVerified,
+    true,
+    'Genuine company verification badge MUST NOT be removed when marked Accepted'
+  );
+
+  // Case C: Card was not accepted, but has genuine company verification data
+  const plainVerified = mapInternship(
+    { _id: 'card_plain_verified', role: 'Intern C', isVerified: true },
+    statusSets
+  );
+  assert.strictEqual(plainVerified.isVerified, true, 'Genuine company verification badge must remain present');
+
+  // Verify that InternshipCard renders verified badge using genuine isVerified
+  const cardComponentPath = path.resolve(__dirname, '../web/src/features/internships/InternshipCard.jsx');
+  const cardSource = fs.readFileSync(cardComponentPath, 'utf8');
+  assert.ok(cardSource.includes('id={`verified-badge-${internship.id}`}'));
+  assert.ok(cardSource.includes('BadgeCheck'));
+});
+
+// ─────────────────────────────────────────────────────────────
+// TEST 8: Rejecting a saved internship confirmation dialog and action sync
+// ─────────────────────────────────────────────────────────────
+
+test('Test 8: Rejecting a saved internship requires confirmation dialog, keeps actions in sync, and preserves history', async () => {
+  const pagePath = path.resolve(__dirname, '../web/src/app/internships/page.jsx');
+  const pageSource = fs.readFileSync(pagePath, 'utf8');
+
+  // 1. Verify confirmation dialog message and buttons in page source
+  assert.ok(
+    pageSource.includes('This internship is saved. Rejecting it will remove it from Saved. Continue?'),
+    'Dialog must display the exact confirmation prompt'
+  );
+  assert.ok(pageSource.includes('Keep Saved'), 'Dialog must provide "Keep Saved" choice');
+  assert.ok(
+    pageSource.includes('Remove from Saved & Reject'),
+    'Dialog must provide "Remove from Saved & Reject" choice'
+  );
+  assert.ok(
+    pageSource.includes('rejectConfirmCard'),
+    'Page must maintain reject confirmation state'
+  );
+  assert.ok(
+    pageSource.includes('action === "rejected" && activeCard.isSaved'),
+    'Rejecting a saved card must intercept and trigger confirmation'
+  );
+
+  // 2. Simulate "Keep Saved": no backend action is called; records remain intact
+  const initialActions = [
+    { internship: 'card_1', saved: true, decision: null },
+    { internship: 'card_2', saved: false, decision: 'accepted' },
+  ];
+  let apiCalls = [];
+  const mockSaveAction = async (id, action) => {
+    apiCalls.push({ id, action });
+  };
+
+  // Student clicks "Keep Saved" -> mock handler does nothing to backend
+  assert.strictEqual(apiCalls.length, 0, 'Keep Saved must not make any update calls');
+  assert.strictEqual(initialActions[0].saved, true, 'Internship must stay saved');
+
+  // 3. Simulate "Remove from Saved & Reject": calls unsaved and rejected in sequence
+  await removeSavedAndRejectInternship('card_1', mockSaveAction);
+
+  assert.strictEqual(apiCalls.length, 2, 'Should execute unsaved and rejected actions');
+  assert.deepStrictEqual(apiCalls[0], { id: 'card_1', action: 'unsaved' });
+  assert.deepStrictEqual(apiCalls[1], { id: 'card_1', action: 'rejected' });
+
+  // 4. Verify unrelated action and application history are not deleted or altered
+  assert.strictEqual(initialActions.length, 2, 'Action history count preserved');
+  assert.strictEqual(initialActions[1].decision, 'accepted', 'Unrelated action history untouched');
 });

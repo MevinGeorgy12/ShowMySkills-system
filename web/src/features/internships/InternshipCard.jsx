@@ -246,9 +246,12 @@ export default function InternshipCard({
           </span>
         )}
 
-        {/* Verified badge */}
+        {/* Verified badge — genuine company verification badge only */}
         {isVerified && (
-          <span className="absolute top-6 right-7 sm:right-8 inline-flex items-center gap-1 text-[11px] font-semibold text-[#4B9C93] bg-[#E6F7F3] border border-[#4B9C93]/20 rounded-full px-2.5 py-0.5 shadow-2xs">
+          <span
+            id={`verified-badge-${internship.id}`}
+            className="absolute top-6 right-7 sm:right-8 inline-flex items-center gap-1 text-[11px] font-semibold text-[#4B9C93] bg-[#E6F7F3] border border-[#4B9C93]/20 rounded-full px-2.5 py-0.5 shadow-2xs"
+          >
             <BadgeCheck className="w-3.5 h-3.5" />
             Verified
           </span>
