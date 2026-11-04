@@ -63,17 +63,16 @@ test('Location: Hybrid mode requires a non-empty location', () => {
   assert.strictEqual(valid.body.location, 'Hyderabad, Tech City');
 });
 
-test('Location: Remote mode clears location and rejects leftover physical locations', () => {
+test('Location: Remote mode clears empty or stale physical locations', () => {
   // Empty location passes and is cleared
   const validRemote = runValidation({ mode: 'remote', location: '' });
   assert.strictEqual(validRemote.nextCalled, true);
   assert.strictEqual(validRemote.body.location, '');
 
-  // Submitting leftover physical location is rejected
-  const invalidRemote = runValidation({ mode: 'remote', location: 'Mumbai Office Floor 3' });
-  assert.strictEqual(invalidRemote.nextCalled, false);
-  assert.strictEqual(invalidRemote.statusCode, 400);
-  assert.match(invalidRemote.jsonResponse.message, /Location must not be provided for Remote/);
+  // A stale physical location is cleared before saving
+  const staleRemote = runValidation({ mode: 'remote', location: 'Mumbai Office Floor 3' });
+  assert.strictEqual(staleRemote.nextCalled, true);
+  assert.strictEqual(staleRemote.body.location, '');
 });
 
 // ──── Duration Validation Tests ────

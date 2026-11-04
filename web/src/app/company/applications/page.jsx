@@ -101,6 +101,12 @@ function CompanyApplicationsContent() {
   const [formErrors, setFormErrors] = useState({});
   const [postingLoading, setPostingLoading] = useState(false);
 
+  const handleWorkModalityChange = (e) => {
+    const mode = e.target.value;
+    setPostForm((prev) => ({ ...prev, mode, location: mode === "remote" ? "" : prev.location }));
+    setFormErrors((prev) => ({ ...prev, location: "" }));
+  };
+
   const handleDepartmentChange = (e) => {
     const val = e.target.value;
     if (val === "custom") {
@@ -990,17 +996,7 @@ function CompanyApplicationsContent() {
                       </label>
                       <select
                         value={postForm.mode}
-                        onChange={(e) => {
-                          const newMode = e.target.value;
-                          setPostForm((prev) => ({
-                            ...prev,
-                            mode: newMode,
-                            location: newMode === "remote" ? "" : prev.location,
-                          }));
-                          if (formErrors.location) {
-                            setFormErrors((prev) => ({ ...prev, location: "" }));
-                          }
-                        }}
+                        onChange={handleWorkModalityChange}
                         className="w-full h-11 px-3 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all cursor-pointer"
                       >
                         <option value="remote">Remote (Anywhere)</option>
@@ -1009,36 +1005,26 @@ function CompanyApplicationsContent() {
                       </select>
                     </div>
 
-                    <div className="space-y-1.5">
+                    {postForm.mode !== "remote" && <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        Location {postForm.mode === "remote" ? "(Not applicable)" : "*"}
+                        Location *
                       </label>
-                      {postForm.mode === "remote" ? (
-                        <div className="w-full h-11 px-3.5 rounded-xl border border-gray-200 bg-gray-100 text-xs text-gray-400 italic flex items-center">
-                          Location disabled for Remote positions
-                        </div>
-                      ) : (
-                        <input
-                          type="text"
-                          placeholder="e.g. Bengaluru, India"
-                          value={postForm.location}
-                          onChange={(e) => {
-                            setPostForm({ ...postForm, location: e.target.value });
-                            if (formErrors.location) {
-                              setFormErrors((prev) => ({ ...prev, location: "" }));
-                            }
-                          }}
-                          className={`w-full h-11 px-3.5 rounded-xl border ${
-                            formErrors.location ? "border-red-400 bg-red-50/30" : "border-gray-200 bg-gray-50"
-                          } text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all`}
-                        />
-                      )}
-                      {formErrors.location && (
-                        <p className="text-[11px] text-red-500 font-medium">
-                          {formErrors.location}
-                        </p>
-                      )}
-                    </div>
+                      <input
+                        type="text"
+                        required
+                        required
+                        maxLength={150}
+                        placeholder="e.g. Bengaluru, Karnataka or Head Office"
+                        value={postForm.location}
+                        onChange={(e) => {
+                          setPostForm({ ...postForm, location: e.target.value });
+                          if (formErrors.location) setFormErrors((prev) => ({ ...prev, location: "" }));
+                        }}
+                        aria-invalid={Boolean(formErrors.location)}
+                        className={`w-full h-11 px-3.5 rounded-xl border ${formErrors.location ? "border-red-400 bg-red-50/30" : "border-gray-200 bg-gray-50"} text-sm text-gray-900 focus:outline-none focus:border-[#4B9C93] focus:bg-white transition-all`}
+                      />
+                      {formErrors.location && <p className="text-[11px] text-red-500 font-medium">{formErrors.location}</p>}
+                    </div>}
                   </div>
 
                   {/* Duration: Presets or Custom */}
