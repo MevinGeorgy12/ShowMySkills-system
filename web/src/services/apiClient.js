@@ -620,5 +620,11 @@ export const uploadService = {
     formData.append("file", file);
     return apiRequest("/upload/internship-poster", "POST", formData);
   },
+
+  uploadCompanyLogo: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiRequest("/upload/logo", "POST", formData);
+  },
 };
 
