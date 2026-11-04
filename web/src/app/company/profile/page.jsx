@@ -263,21 +263,103 @@ export default function CompanyProfilePage() {
             <div className="px-6 pb-6 pt-0 relative flex flex-col sm:flex-row sm:items-end justify-between gap-6 -mt-16 sm:-mt-14">
               <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 text-center sm:text-left">
                 {/* Logo Box */}
-                <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white p-2 shadow-lg border border-gray-100 flex items-center justify-center shrink-0">
-                  {company.logo ? (
+                <div
+                  className={`w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white p-2 shadow-lg border flex items-center justify-center shrink-0 relative transition-all ${
+                    isEditing
+                      ? "border-[#4B9C93] ring-2 ring-[#4B9C93]/30 cursor-pointer group"
+                      : "border-gray-100"
+                  }`}
+                  {...(isEditing
+                    ? {
+                        role: "button",
+                        tabIndex: 0,
+                        "aria-label": (isEditing ? formData.logo : company.logo)
+                          ? "Change company logo"
+                          : "Upload company logo",
+                        onClick: () => !logoUploading && fileInputRef.current?.click(),
+                        onKeyDown: (e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            if (!logoUploading) fileInputRef.current?.click();
+                          }
+                        },
+                      }
+                    : {})}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                    onChange={handleLogoFileChange}
+                    className="hidden"
+                    disabled={!isEditing || logoUploading}
+                    aria-hidden="true"
+                  />
+
+                  {/* Remove logo button while editing */}
+                  {isEditing && formData.logo && !logoUploading && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveLogo();
+                      }}
+                      className="absolute -top-1.5 -right-1.5 p-1.5 rounded-full bg-white border border-rose-200 text-rose-500 hover:bg-rose-50 hover:text-rose-600 shadow-sm z-10 cursor-pointer transition-all"
+                      title="Remove logo"
+                      aria-label="Remove logo"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {(isEditing ? formData.logo : company.logo) ? (
                     <div className="w-full h-full rounded-2xl overflow-hidden border border-gray-100 flex items-center justify-center bg-white relative">
                       <img
-                        src={company.logo}
-                        alt={`${company.name || "Company"} logo`}
+                        src={isEditing ? formData.logo : company.logo}
+                        alt={`${(isEditing ? formData.name : company.name) || "Company"} logo`}
                         className="w-full h-full object-contain p-1"
                       />
+                      {isEditing && (
+                        <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity flex flex-col items-center justify-center text-white p-1 text-center">
+                          <Upload className="w-5 h-5 mb-1" />
+                          <span className="text-[10px] font-bold">Change Logo</span>
+                        </div>
+                      )}
+                      {isEditing && logoUploading && (
+                        <div className="absolute inset-0 bg-white/85 backdrop-blur-[1px] flex flex-col items-center justify-center text-[#4B9C93] p-1 text-center">
+                          <div className="w-5 h-5 border-2 border-[#4B9C93]/30 border-t-[#4B9C93] rounded-full animate-spin mb-1" />
+                          <span className="text-[10px] font-bold">Uploading...</span>
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="w-full h-full rounded-2xl bg-gradient-to-tr from-[#E6F7F3] to-teal-50 border border-[#4B9C93]/20 flex flex-col items-center justify-center text-[#4B9C93]">
-                      <Building2 className="w-12 h-12" />
-                      <span className="text-[10px] font-bold tracking-wider mt-1 uppercase text-[#4B9C93]/90">
-                        Partner
-                      </span>
+                    <div className="w-full h-full rounded-2xl bg-gradient-to-tr from-[#E6F7F3] to-teal-50 border border-[#4B9C93]/20 flex flex-col items-center justify-center text-[#4B9C93] relative overflow-hidden">
+                      {isEditing ? (
+                        <>
+                          {logoUploading ? (
+                            <div className="flex flex-col items-center justify-center text-[#4B9C93]">
+                              <div className="w-5 h-5 border-2 border-[#4B9C93]/30 border-t-[#4B9C93] rounded-full animate-spin mb-1" />
+                              <span className="text-[10px] font-bold">Uploading...</span>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="w-8 h-8 rounded-full bg-[#4B9C93]/15 flex items-center justify-center mb-1 group-hover:bg-[#4B9C93] group-hover:text-white transition-colors">
+                                <Upload className="w-4 h-4" />
+                              </div>
+                              <span className="text-[10px] font-bold tracking-wider uppercase text-[#4B9C93]">
+                                Upload Logo
+                              </span>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <Building2 className="w-12 h-12" />
+                          <span className="text-[10px] font-bold tracking-wider mt-1 uppercase text-[#4B9C93]/90">
+                            Partner
+                          </span>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -357,84 +439,15 @@ export default function CompanyProfilePage() {
                 <Edit3 className="w-5 h-5 text-[#4B9C93]" />
                 Update Organization Profile
               </h3>
-              <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Company Logo Control */}
-                <div className="space-y-2 sm:col-span-2">
-                  <label className="text-xs font-semibold text-gray-700">Company Logo</label>
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-2xl border border-gray-200 bg-gray-50/50">
-                    {/* Logo Preview */}
-                    <div className="w-20 h-20 rounded-2xl bg-white border border-gray-200 flex items-center justify-center shrink-0 overflow-hidden shadow-xs relative">
-                      {formData.logo ? (
-                        <img
-                          src={formData.logo}
-                          alt="Company logo preview"
-                          className="w-full h-full object-contain p-1"
-                        />
-                      ) : (
-                        <div className="flex flex-col items-center justify-center text-gray-400">
-                          <Building2 className="w-8 h-8 text-[#4B9C93]" />
-                          <span className="text-[9px] font-semibold text-gray-400 mt-0.5">No Logo</span>
-                        </div>
-                      )}
-                    </div>
 
-                    {/* Logo Actions and Guidance */}
-                    <div className="flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp,image/svg+xml"
-                          onChange={handleLogoFileChange}
-                          className="hidden"
-                          disabled={logoUploading}
-                        />
-                        <button
-                          type="button"
-                          disabled={logoUploading}
-                          onClick={() => fileInputRef.current?.click()}
-                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
-                        >
-                          {logoUploading ? (
-                            <>
-                              <div className="w-3.5 h-3.5 border-2 border-[#4B9C93]/30 border-t-[#4B9C93] rounded-full animate-spin" />
-                              <span>Uploading...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="w-3.5 h-3.5 text-[#4B9C93]" />
-                              <span>{formData.logo ? "Change Logo" : "Upload Logo"}</span>
-                            </>
-                          )}
-                        </button>
-
-                        {formData.logo && (
-                          <button
-                            type="button"
-                            disabled={logoUploading}
-                            onClick={handleRemoveLogo}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:border-rose-300 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span>Remove Logo</span>
-                          </button>
-                        )}
-                      </div>
-
-                      <p className="text-[11px] text-gray-500">
-                        Allowed formats: JPEG, PNG, WebP, SVG. Max file size: 5MB.
-                      </p>
-
-                      {logoError && (
-                        <p className="text-xs text-rose-600 font-medium">{logoError}</p>
-                      )}
-                      {logoSuccess && (
-                        <p className="text-xs text-emerald-600 font-medium">{logoSuccess}</p>
-                      )}
-                    </div>
-                  </div>
+              {logoError && (
+                <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                  <span>{logoError}</span>
                 </div>
+              )}
 
+              <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1 sm:col-span-2">
                   <label className="text-xs font-semibold text-gray-700">Company Name</label>
                   <input

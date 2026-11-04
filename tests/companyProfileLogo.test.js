@@ -352,3 +352,74 @@ test('Header Logo Display: renders default placeholder when logo is missing or e
   const nullHeader = getHeaderLogoElement(companyNullLogo);
   assert.strictEqual(nullHeader.type, 'placeholder');
 });
+
+// ──── 6. Logo Box as upload control in edit mode ────
+
+// Logo Box properties helper mirroring CompanyProfilePage
+const getLogoBoxProps = ({ isEditing, company, formData }) => {
+  const activeLogo = isEditing ? formData.logo : company.logo;
+  const isInteractive = Boolean(isEditing);
+
+  return {
+    isInteractive,
+    role: isInteractive ? 'button' : undefined,
+    tabIndex: isInteractive ? 0 : undefined,
+    ariaLabel: isInteractive
+      ? activeLogo
+        ? 'Change company logo'
+        : 'Upload company logo'
+      : undefined,
+    displayedLogo: activeLogo || '',
+  };
+};
+
+test('Logo Box: In edit mode, box acts as upload control with keyboard access and accessible label', () => {
+  const viewModeProps = getLogoBoxProps({
+    isEditing: false,
+    company: { name: 'Acme', logo: '' },
+    formData: { name: 'Acme', logo: '' },
+  });
+  assert.strictEqual(viewModeProps.isInteractive, false);
+  assert.strictEqual(viewModeProps.role, undefined);
+  assert.strictEqual(viewModeProps.tabIndex, undefined);
+  assert.strictEqual(viewModeProps.ariaLabel, undefined);
+
+  // Edit mode without logo
+  const editModeEmpty = getLogoBoxProps({
+    isEditing: true,
+    company: { name: 'Acme', logo: '' },
+    formData: { name: 'Acme', logo: '' },
+  });
+  assert.strictEqual(editModeEmpty.isInteractive, true);
+  assert.strictEqual(editModeEmpty.role, 'button');
+  assert.strictEqual(editModeEmpty.tabIndex, 0);
+  assert.strictEqual(editModeEmpty.ariaLabel, 'Upload company logo');
+
+  // Edit mode with preview logo
+  const editModeWithPreview = getLogoBoxProps({
+    isEditing: true,
+    company: { name: 'Acme', logo: 'https://example.com/old-logo.png' },
+    formData: { name: 'Acme', logo: 'https://example.com/new-preview-logo.png' },
+  });
+  assert.strictEqual(editModeWithPreview.isInteractive, true);
+  assert.strictEqual(editModeWithPreview.role, 'button');
+  assert.strictEqual(editModeWithPreview.tabIndex, 0);
+  assert.strictEqual(editModeWithPreview.ariaLabel, 'Change company logo');
+  assert.strictEqual(editModeWithPreview.displayedLogo, 'https://example.com/new-preview-logo.png');
+});
+
+test('Logo Box: Preview is shown during edit mode, and saved logo is shown in view mode', () => {
+  const company = { name: 'Acme', logo: 'https://example.com/saved-logo.png' };
+  const formData = { name: 'Acme', logo: 'https://example.com/preview-logo.png' };
+
+  // While editing, preview from formData is shown
+  const editState = getLogoBoxProps({ isEditing: true, company, formData });
+  assert.strictEqual(editState.displayedLogo, 'https://example.com/preview-logo.png');
+
+  // After saving, company.logo is updated to preview-logo and isEditing is false
+  const savedCompany = { ...company, logo: formData.logo };
+  const viewState = getLogoBoxProps({ isEditing: false, company: savedCompany, formData });
+  assert.strictEqual(viewState.displayedLogo, 'https://example.com/preview-logo.png');
+  assert.strictEqual(viewState.isInteractive, false);
+});
+
