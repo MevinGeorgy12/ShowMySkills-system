@@ -94,6 +94,14 @@ export const removeInternship = async (req, res, next) => {
       }
     }
 
+    // Do not allow deleting an Open/Active posting through a bypass of the UI restriction
+    if (existing.status === 'active') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete an active internship posting. Please close the posting before deleting.',
+      });
+    }
+
     await deleteInternship(req.params.id);
 
     return res.status(200).json({
