@@ -447,6 +447,20 @@ export const userService = {
     }
 
     // Map common aliases from frontend forms
+    if (data.companyProfile && typeof data.companyProfile === 'object') {
+      delete updateData.companyProfile;
+      for (const [subKey, subVal] of Object.entries(data.companyProfile)) {
+        updateData[`companyProfile.${subKey}`] = subVal;
+      }
+    }
+
+    if (data.logo !== undefined) {
+      updateData['companyProfile.logo'] = data.logo;
+      updateData.profileIcon = data.logo;
+    } else if (data.companyProfile?.logo !== undefined) {
+      updateData.profileIcon = data.companyProfile.logo;
+    }
+
     if (data.github && !updateData.githubUrl) updateData.githubUrl = data.github;
     if (data.linkedin && !updateData.linkedinUrl) updateData.linkedinUrl = data.linkedin;
     if (data.department && !updateData.branch) updateData.branch = data.department;

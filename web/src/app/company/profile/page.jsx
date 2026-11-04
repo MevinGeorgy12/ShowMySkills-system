@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   Building2,
@@ -19,10 +19,12 @@ import {
   ArrowRight,
   Heart,
   Share2,
+  Upload,
+  Trash2,
 } from "lucide-react";
 import DashboardSidebar from "@/components/DashboardSidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import { authService, apiRequest } from "@/services/apiClient";
+import { authService, apiRequest, uploadService } from "@/services/apiClient";
 
 const initialCompanyData = {
   name: "",
@@ -58,6 +60,7 @@ export default function CompanyProfilePage() {
   const [formData, setFormData] = useState({
     name: company.name,
     tagline: company.tagline,
+    logo: company.logo,
     location: company.location,
     website: company.website,
     email: company.email,
@@ -65,25 +68,50 @@ export default function CompanyProfilePage() {
     about: company.about,
   });
 
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState("");
+  const [logoSuccess, setLogoSuccess] = useState("");
+  const fileInputRef = useRef(null);
+
   useEffect(() => {
     let isMounted = true;
     authService.getCurrentUser(null).then((user) => {
       if (isMounted && user) {
+        const logo = user.companyProfile?.logo || user.profileIcon || "";
+        const name = user.companyProfile?.companyName || user.name || "";
+        const tagline = user.companyProfile?.tagline || user.headline || "";
+        const email = user.email || "";
+        const location = user.location || "";
+        const website = user.companyProfile?.website || user.website || "";
+        const about = user.companyProfile?.aboutCompany || user.bio || "";
+        const phone = user.phone || "";
+        const verified =
+          user.companyProfile?.isVerified !== undefined
+            ? user.companyProfile.isVerified
+            : false;
+
         setCompany((prev) => ({
           ...prev,
-          name: user.name || prev.name,
-          email: user.email || prev.email,
-          location: user.location || prev.location,
-          website: user.website || prev.website,
-          about: user.bio || prev.about,
+          name: name || prev.name,
+          tagline: tagline || prev.tagline,
+          logo: logo !== undefined ? logo : prev.logo,
+          verified: verified ?? prev.verified,
+          email: email || prev.email,
+          location: location || prev.location,
+          website: website || prev.website,
+          about: about || prev.about,
+          phone: phone || prev.phone,
         }));
         setFormData((prev) => ({
           ...prev,
-          name: user.name || prev.name,
-          email: user.email || prev.email,
-          location: user.location || prev.location,
-          website: user.website || prev.website,
-          about: user.bio || prev.about,
+          name: name || prev.name,
+          tagline: tagline || prev.tagline,
+          logo: logo !== undefined ? logo : prev.logo,
+          email: email || prev.email,
+          location: location || prev.location,
+          website: website || prev.website,
+          about: about || prev.about,
+          phone: phone || prev.phone,
         }));
       }
     });
@@ -91,6 +119,100 @@ export default function CompanyProfilePage() {
       isMounted = false;
     };
   }, []);
+
+  const handleToggleEdit = () => {
+    if (isEditing) {
+      setFormData({
+        name: company.name,
+        tagline: company.tagline,
+        logo: company.logo,
+        location: company.location,
+        website: company.website,
+        email: company.email,
+        phone: company.phone,
+        about: company.about,
+      });
+      setLogoError("");
+      setLogoSuccess("");
+      setIsEditing(false);
+    } else {
+      setFormData({
+        name: company.name,
+        tagline: company.tagline,
+        logo: company.logo,
+        location: company.location,
+        website: company.website,
+        email: company.email,
+        phone: company.phone,
+        about: company.about,
+      });
+      setLogoError("");
+      setLogoSuccess("");
+      setIsEditing(true);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setFormData({
+      name: company.name,
+      tagline: company.tagline,
+      logo: company.logo,
+      location: company.location,
+      website: company.website,
+      email: company.email,
+      phone: company.phone,
+      about: company.about,
+    });
+    setLogoError("");
+    setLogoSuccess("");
+    setIsEditing(false);
+  };
+
+  const handleLogoFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/svg+xml"];
+    if (!allowedTypes.includes(file.type)) {
+      setLogoError("Invalid file format. Only JPEG, PNG, WebP, and SVG images are allowed.");
+      setLogoSuccess("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setLogoError("File size exceeds 5MB limit.");
+      setLogoSuccess("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setLogoError("");
+    setLogoUploading(true);
+    try {
+      const res = await uploadService.uploadCompanyLogo(file);
+      const url = res?.data?.url || res?.url;
+      if (url) {
+        setFormData((prev) => ({ ...prev, logo: url }));
+        setLogoSuccess("Logo uploaded successfully");
+        setTimeout(() => setLogoSuccess(""), 3000);
+      } else {
+        throw new Error("Upload did not return a valid URL");
+      }
+    } catch (err) {
+      setLogoError(err?.message || "Failed to upload company logo");
+    } finally {
+      setLogoUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setFormData((prev) => ({ ...prev, logo: "" }));
+    setLogoError("");
+    setLogoSuccess("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -128,7 +250,7 @@ export default function CompanyProfilePage() {
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setIsEditing(!isEditing)}
+                  onClick={handleToggleEdit}
                   className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white text-gray-800 text-xs sm:text-sm font-semibold shadow-sm hover:bg-gray-50 transition-all cursor-pointer"
                 >
                   <Edit3 className="w-4 h-4 text-[#4B9C93]" />
@@ -142,12 +264,22 @@ export default function CompanyProfilePage() {
               <div className="flex flex-col sm:flex-row items-center sm:items-end gap-5 text-center sm:text-left">
                 {/* Logo Box */}
                 <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-3xl bg-white p-2 shadow-lg border border-gray-100 flex items-center justify-center shrink-0">
-                  <div className="w-full h-full rounded-2xl bg-gradient-to-tr from-[#E6F7F3] to-teal-50 border border-[#4B9C93]/20 flex flex-col items-center justify-center text-[#4B9C93]">
-                    <Building2 className="w-12 h-12" />
-                    <span className="text-[10px] font-bold tracking-wider mt-1 uppercase text-[#4B9C93]/90">
-                      Partner
-                    </span>
-                  </div>
+                  {company.logo ? (
+                    <div className="w-full h-full rounded-2xl overflow-hidden border border-gray-100 flex items-center justify-center bg-white relative">
+                      <img
+                        src={company.logo}
+                        alt={`${company.name || "Company"} logo`}
+                        className="w-full h-full object-contain p-1"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-full h-full rounded-2xl bg-gradient-to-tr from-[#E6F7F3] to-teal-50 border border-[#4B9C93]/20 flex flex-col items-center justify-center text-[#4B9C93]">
+                      <Building2 className="w-12 h-12" />
+                      <span className="text-[10px] font-bold tracking-wider mt-1 uppercase text-[#4B9C93]/90">
+                        Partner
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -226,6 +358,83 @@ export default function CompanyProfilePage() {
                 Update Organization Profile
               </h3>
               <form onSubmit={handleSave} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Company Logo Control */}
+                <div className="space-y-2 sm:col-span-2">
+                  <label className="text-xs font-semibold text-gray-700">Company Logo</label>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 rounded-2xl border border-gray-200 bg-gray-50/50">
+                    {/* Logo Preview */}
+                    <div className="w-20 h-20 rounded-2xl bg-white border border-gray-200 flex items-center justify-center shrink-0 overflow-hidden shadow-xs relative">
+                      {formData.logo ? (
+                        <img
+                          src={formData.logo}
+                          alt="Company logo preview"
+                          className="w-full h-full object-contain p-1"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-gray-400">
+                          <Building2 className="w-8 h-8 text-[#4B9C93]" />
+                          <span className="text-[9px] font-semibold text-gray-400 mt-0.5">No Logo</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Logo Actions and Guidance */}
+                    <div className="flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                          onChange={handleLogoFileChange}
+                          className="hidden"
+                          disabled={logoUploading}
+                        />
+                        <button
+                          type="button"
+                          disabled={logoUploading}
+                          onClick={() => fileInputRef.current?.click()}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50 hover:border-gray-400 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                          {logoUploading ? (
+                            <>
+                              <div className="w-3.5 h-3.5 border-2 border-[#4B9C93]/30 border-t-[#4B9C93] rounded-full animate-spin" />
+                              <span>Uploading...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-3.5 h-3.5 text-[#4B9C93]" />
+                              <span>{formData.logo ? "Change Logo" : "Upload Logo"}</span>
+                            </>
+                          )}
+                        </button>
+
+                        {formData.logo && (
+                          <button
+                            type="button"
+                            disabled={logoUploading}
+                            onClick={handleRemoveLogo}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-rose-200 text-xs font-semibold text-rose-600 hover:bg-rose-50 hover:border-rose-300 shadow-xs transition-all disabled:opacity-50 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Remove Logo</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-gray-500">
+                        Allowed formats: JPEG, PNG, WebP, SVG. Max file size: 5MB.
+                      </p>
+
+                      {logoError && (
+                        <p className="text-xs text-rose-600 font-medium">{logoError}</p>
+                      )}
+                      {logoSuccess && (
+                        <p className="text-xs text-emerald-600 font-medium">{logoSuccess}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-1 sm:col-span-2">
                   <label className="text-xs font-semibold text-gray-700">Company Name</label>
                   <input
@@ -292,7 +501,7 @@ export default function CompanyProfilePage() {
                 <div className="sm:col-span-2 flex justify-end gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={() => setIsEditing(false)}
+                    onClick={handleCancelEdit}
                     className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold hover:bg-gray-50"
                   >
                     Cancel
