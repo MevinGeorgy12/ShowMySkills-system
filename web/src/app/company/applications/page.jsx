@@ -457,16 +457,6 @@ function CompanyApplicationsContent() {
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowPostModal(true)}
-                id="ats-post-internship-btn"
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#009689] hover:bg-[#007e73] active:scale-[0.98] text-white text-xs sm:text-sm font-bold shadow-md shadow-[#009689]/20 transition-all cursor-pointer"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>+ Post Internship</span>
-              </button>
-
               <span className="text-xs font-semibold px-3 py-2 rounded-full bg-white border border-gray-200 text-gray-700 shadow-2xs shrink-0">
                 {applications.length} Total Applicants
               </span>
@@ -773,13 +763,6 @@ function CompanyApplicationsContent() {
                     View All Internships
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShowPostModal(true)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-[#4B9C93] text-white hover:bg-[#3d867e] transition-colors"
-                >
-                  Post New Opening
-                </button>
               </div>
             </div>
           )}

@@ -229,27 +229,7 @@ export default function DashboardSidebar() {
                 Sign Up / Log In
               </Link>
             </div>
-          ) : role === "company" ? (
-            <div className="my-2 bg-white rounded-xl p-3 shadow-md shadow-black/5 text-center">
-              <div className="h-6 w-6 rounded-full bg-[#4B9C93]/10 flex items-center justify-center mx-auto mb-1">
-                <Briefcase className="w-3.5 h-3.5 text-[#4B9C93]" />
-              </div>
-              <h4 className="text-xs font-bold text-gray-900 mb-0.5">
-                Hire Top Students
-              </h4>
-              <p className="text-[10px] text-gray-500 leading-tight mb-2">
-                Post verified internship opportunities and review applications
-              </p>
-              <Link
-                href="/company/applications?new=true"
-                onClick={closeSidebar}
-                id="sidebar-company-post-btn"
-                className="block w-full py-1.5 rounded-full bg-[#4B9C93] text-white text-[11px] font-semibold hover:bg-[#3d867e] transition-colors cursor-pointer text-center"
-              >
-                Post Internship
-              </Link>
-            </div>
-          ) : role === "college" ? (
+          ) : role === "company" ? null : role === "college" ? (
             <div className="my-2 bg-white rounded-xl p-3 shadow-md shadow-black/5 text-center">
               <div className="h-6 w-6 rounded-full bg-[#4B9C93]/10 flex items-center justify-center mx-auto mb-1">
                 <GraduationCap className="w-3.5 h-3.5 text-[#4B9C93]" />

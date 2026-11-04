@@ -731,6 +731,19 @@ export default function CompanyInternshipsPage() {
             </div>
           )}
 
+          {/* Main Posting Action */}
+          <div className="flex items-center justify-end">
+            <button
+              id="company-new-posting-btn"
+              type="button"
+              onClick={() => setCreateModal((prev) => ({ ...prev, isOpen: true }))}
+              className="inline-flex items-center gap-2 bg-[#4B9C93] hover:bg-[#3d867e] text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-sm hover:shadow-md transition-all cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>New Posting</span>
+            </button>
+          </div>
+
           {/* Search & Status Filters */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 space-y-4">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">

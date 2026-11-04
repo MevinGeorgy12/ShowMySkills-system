@@ -32,37 +32,108 @@ test('Layout: company name header alignment respects fixed sidebar margin', () =
   assert.ok(headerIdx > wrapperIdx, 'DashboardHeader must sit inside the offset container');
 });
 
-test('Header & Navigation: duplicate Post Internship button removed, keeping shared header CTA', () => {
-  const pagePath = path.resolve(__dirname, '../web/src/app/company/internships/page.jsx');
-  const pageContent = fs.readFileSync(pagePath, 'utf8');
-
+test('Header & Sidebar: shared Post Internship button removed from header and generic sidebar CTA hidden for company', () => {
   const headerPath = path.resolve(__dirname, '../web/src/components/DashboardHeader.jsx');
   const headerContent = fs.readFileSync(headerPath, 'utf8');
 
-  // Shared header button must exist
-  assert.ok(
+  const sidebarPath = path.resolve(__dirname, '../web/src/components/DashboardSidebar.jsx');
+  const sidebarContent = fs.readFileSync(sidebarPath, 'utf8');
+
+  // 1. Shared header button beside notification icon must be removed for company
+  assert.strictEqual(
     headerContent.includes('id="header-post-internship-btn"'),
-    'Shared header must contain the Post Internship button'
-  );
-  assert.ok(
-    headerContent.includes('Post Internship'),
-    'Shared header button must read "Post Internship"'
+    false,
+    'Shared header must NOT contain header-post-internship-btn'
   );
 
-  // Duplicate button beside the page heading in company/internships/page.jsx must be removed
-  const headingBlock = pageContent.slice(
-    pageContent.indexOf('Manage Internship Postings'),
-    pageContent.indexOf('Quick Metrics')
+  // 2. Sidebar generic company posting CTA card must be hidden for company
+  assert.strictEqual(
+    sidebarContent.includes('id="sidebar-company-post-btn"'),
+    false,
+    'Sidebar must NOT contain sidebar-company-post-btn for company'
   );
   assert.strictEqual(
-    headingBlock.includes('Post New Internship') || headingBlock.includes('Post Internship'),
+    sidebarContent.includes('Hire Top Students'),
     false,
-    'Duplicate Post Internship button beside page heading must be removed'
+    'Sidebar must NOT render generic "Hire Top Students" card for company'
   );
 });
 
 // ─────────────────────────────────────────────────────────────
-// 2. Open/Active vs Closed actions (Close, Reopen, Delete visibility)
+// 2. Page-specific posting button verification across all 5 company pages
+// ─────────────────────────────────────────────────────────────
+
+test('Posting placement: Dashboard has main "Post New Opening" and Manage Internships has "New Posting"', () => {
+  // 1. Dashboard Page
+  const dashboardPath = path.resolve(__dirname, '../web/src/app/company/dashboard/page.jsx');
+  const dashboardContent = fs.readFileSync(dashboardPath, 'utf8');
+  assert.ok(
+    dashboardContent.includes('Post New Opening'),
+    'Dashboard banner must have "Post New Opening" button'
+  );
+
+  // 2. Manage Internships Page
+  const internshipsPath = path.resolve(__dirname, '../web/src/app/company/internships/page.jsx');
+  const internshipsContent = fs.readFileSync(internshipsPath, 'utf8');
+
+  // Must have "New Posting" button
+  assert.ok(
+    internshipsContent.includes('id="company-new-posting-btn"'),
+    'Manage Internships page must have #company-new-posting-btn'
+  );
+  assert.ok(
+    internshipsContent.includes('New Posting</span>'),
+    'Manage Internships button label must be "New Posting"'
+  );
+
+  // Verify placement: below metrics and above Search & Status Filters
+  const metricsIdx = internshipsContent.indexOf('Total Postings');
+  const newPostingIdx = internshipsContent.indexOf('id="company-new-posting-btn"');
+  const searchFiltersIdx = internshipsContent.indexOf('Search & Status Filters');
+
+  assert.ok(
+    newPostingIdx > metricsIdx,
+    '"New Posting" button must sit below page metrics'
+  );
+  assert.ok(
+    newPostingIdx < searchFiltersIdx,
+    '"New Posting" button must sit above search and filters'
+  );
+
+  // Verify size and styling consistency (px-5 py-2.5 rounded-full text-sm font-bold shadow-sm)
+  assert.ok(
+    internshipsContent.includes('px-5 py-2.5 rounded-full text-sm font-bold shadow-sm'),
+    'Button must be styled consistently with Dashboard button'
+  );
+
+  // 3. Applications Page: no posting CTA
+  const appsPath = path.resolve(__dirname, '../web/src/app/company/applications/page.jsx');
+  const appsContent = fs.readFileSync(appsPath, 'utf8');
+  assert.strictEqual(
+    appsContent.includes('id="ats-post-internship-btn"'),
+    false,
+    'Applications page must NOT have ats-post-internship-btn'
+  );
+  assert.strictEqual(
+    appsContent.includes('+ Post Internship'),
+    false,
+    'Applications page must NOT have "+ Post Internship" CTA'
+  );
+
+  // 4. People and Chats pages: no posting CTA
+  const peoplePath = path.resolve(__dirname, '../web/src/app/company/people/page.jsx');
+  const peopleContent = fs.readFileSync(peoplePath, 'utf8');
+  assert.strictEqual(peopleContent.includes('Post Internship'), false);
+  assert.strictEqual(peopleContent.includes('New Posting'), false);
+
+  const chatsPath = path.resolve(__dirname, '../web/src/app/company/chats/page.jsx');
+  const chatsContent = fs.readFileSync(chatsPath, 'utf8');
+  assert.strictEqual(chatsContent.includes('Post Internship'), false);
+  assert.strictEqual(chatsContent.includes('New Posting'), false);
+});
+
+// ─────────────────────────────────────────────────────────────
+// 3. Open/Active vs Closed actions (Close, Reopen, Delete visibility)
 // ─────────────────────────────────────────────────────────────
 
 test('Action visibility: Open/Active postings show Close but hide Delete; Closed postings show Reopen and allow Delete', () => {
@@ -92,7 +163,6 @@ test('Action visibility: Open/Active postings show Close but hide Delete; Closed
   );
 
   // Verify Delete action is NOT rendered when isOpen is true
-  // In the file, the delete button is inside the : ( <> ... </> ) false branch of isOpen
   const isOpenBlock = pageContent.slice(
     pageContent.indexOf('{isOpen ? ('),
     pageContent.indexOf('Reopen Posting</span>')
@@ -105,7 +175,7 @@ test('Action visibility: Open/Active postings show Close but hide Delete; Closed
 });
 
 // ─────────────────────────────────────────────────────────────
-// 3. Delete confirmation dialog warning, required checkbox, and button disabled state
+// 4. Delete confirmation dialog warning, required checkbox, and button disabled state
 // ─────────────────────────────────────────────────────────────
 
 test('Delete Dialog: displays exact warning, required checkbox, disabled Delete button until checked, and Cancel preserves posting', () => {
@@ -144,7 +214,7 @@ test('Delete Dialog: displays exact warning, required checkbox, disabled Delete 
 });
 
 // ─────────────────────────────────────────────────────────────
-// 4. API restrictions: Do not delete active postings or applications via bypass
+// 5. API restrictions: Do not delete active postings or applications via bypass
 // ─────────────────────────────────────────────────────────────
 
 test('API Security: removeInternship rejects deleting an Open/Active posting with 400', async () => {
